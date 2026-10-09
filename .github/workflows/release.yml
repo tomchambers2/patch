@@ -64,6 +64,8 @@ jobs:
         run: |
           echo "version=$(node scripts/version.mjs)" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build the CLI the script tests drive
+        run: pnpm turbo build --filter=@patch/cli... --output-logs=errors-only
       - name: Gate
         run: node scripts/personal-check.mjs && node --test scripts/*.test.mjs
       - name: Build the server and web release
@@ -145,7 +147,10 @@ jobs:
       - name: Android SDK pieces the build needs
         run: |
           set -euo pipefail
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          # Feeding "y" from a process substitution: a pipe would make `yes`
+          # exit on SIGPIPE when sdkmanager stops reading, which pipefail
+          # reports as a failure of a step that worked.
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses < <(yes) >/dev/null
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "ndk;26.1.10909125" "build-tools;35.0.0"
       - name: Release signing key
         env:
