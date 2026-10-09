@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dog Log — toilet, weight, jabs, worming</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<style>
+html,body{background:var(--paper);min-height:100%}
+#app{max-width:460px;margin:0 auto;min-height:100vh;position:relative;display:flex;flex-direction:column}
+.scroll{padding:14px 16px 120px;overflow:visible}
+.dock{position:fixed;left:50%;transform:translateX(-50%);width:100%;max-width:460px}
+.modal{position:fixed;justify-content:center}
+.sheet{max-width:460px;margin:0 auto}
+
+.tile.wide{grid-column:1 / -1;display:flex;align-items:center;gap:12px}
+.tile.wide .wb{flex:1;min-width:0}
+.tile.wide .tl{margin-top:0}
+.tile.wide .pill{margin-top:0}
+.tile .hl{font-size:12.5px;color:var(--ink-2);font-weight:500;line-height:1.55}
+.tile .hl b{color:var(--ink);font-weight:700}
+.tile .hl.due b{color:#B23A2F}
+.cd{font-family:var(--display);font-weight:700;font-size:26px;line-height:1;flex:0 0 auto}
+.cd.due{color:var(--scared)}
+
+/* toilet */
+.timer{background:var(--ink);color:#FFF6EC;border-radius:24px;padding:18px 18px 16px;margin-top:8px}
+.timer.due{background:var(--scared)}
+.timer.off{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.timer .tbig{font-family:var(--display);font-weight:700;font-size:60px;line-height:1;letter-spacing:-1.5px}
+.timer .tbig.w{font-size:38px;letter-spacing:-.5px}
+.timer .sub{font-size:13px;font-weight:600;opacity:.75;margin-top:6px}
+.timer .trow{display:flex;gap:8px;margin-top:16px}
+.timer .tb2{flex:1;padding:11px;border-radius:14px;border:1.5px solid rgba(255,246,236,.25);background:none;
+  color:inherit;font-family:var(--text);font-weight:600;font-size:13.5px;cursor:pointer}
+.timer.off .tb2{border-color:var(--line)}
+.timer .tb2.go{background:var(--good);border-color:var(--good);color:#fff;box-shadow:0 5px 0 #2E8451}
+.today{display:flex;gap:10px;margin-top:10px}
+.today .tal{padding:10px 8px}
+.today .tal .tn2{font-size:32px}
+.week{display:flex;gap:6px;align-items:flex-end;height:74px;padding:10px 12px 0}
+.week .d{flex:1;display:flex;flex-direction:column-reverse;gap:2px;align-items:stretch;height:100%}
+.week .d i{display:block;border-radius:3px}
+.week .d i.o{background:var(--good)} .week .d i.n{background:var(--scared)}
+.wdays{display:flex;gap:6px;padding:5px 12px 10px}
+.wdays span{flex:1;text-align:center;font-size:10px;font-weight:700;color:var(--ink-2)}
+.wdays span.now{color:var(--ink)}
+.tpad{margin-top:14px}
+.tpad .seg{justify-content:center}
+.tapbtn{height:150px;font-size:18px;font-family:var(--display);font-weight:700;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:4px}
+.tapbtn .ti{font-size:44px;line-height:1}
+.trow2 .t{font-family:var(--display);font-weight:700;font-size:14px;width:44px;flex:0 0 auto}
+.trow2 .k{font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;flex:0 0 auto}
+.k.o{background:#E1F3E7;color:#2E7D4F} .k.n{background:#FBE0DD;color:#B23A2F}
+
+/* health */
+.hcard{display:flex;align-items:center;gap:12px;margin-bottom:10px;cursor:pointer}
+.hcard .ic{font-size:24px}
+.hcard .hb{flex:1;min-width:0}
+.hcard .ht{font-family:var(--display);font-weight:600;font-size:16px}
+.hcard .hv{font-size:12.5px;color:var(--ink-2);font-weight:500;margin-top:2px}
+.hcard .hv b{color:var(--ink);font-weight:700}
+.hcard .pill{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:99px;background:#F4ECE2;color:var(--ink-2)}
+.hcard .pill.urgent{background:#FBE0DD;color:#B23A2F}
+
+.wnow{display:flex;align-items:baseline;gap:10px;padding:6px 2px 12px}
+.wnow .kg{font-family:var(--display);font-weight:700;font-size:52px;line-height:1;letter-spacing:-1.5px}
+.wnow .kg span{font-size:20px;letter-spacing:0;margin-left:3px}
+.wnow .dl{font-family:var(--display);font-weight:700;font-size:16px;color:var(--good)}
+.chart{padding:12px 10px 6px}
+.chart svg{display:block;width:100%;height:auto}
+.chart text{font-family:var(--text);font-size:10px;font-weight:600;fill:var(--ink-2)}
+.wrow .kg2{font-family:var(--display);font-weight:700;font-size:16px}
+.wrow .dd{font-family:var(--display);font-weight:600;font-size:12.5px;color:var(--good);width:46px;text-align:right}
+.bigkg{font-family:var(--display);font-weight:700;font-size:64px;line-height:1;letter-spacing:-2px;text-align:center;flex:1}
+.bigkg span{font-size:22px;letter-spacing:0;margin-left:3px}
+.kgstep{display:flex;align-items:center;gap:10px;margin:22px 0 6px}
+.kgstep .sbtn{width:58px;height:58px;font-size:28px;border-radius:18px}
+.lastw{text-align:center;font-size:12px;font-weight:600;color:var(--ink-2)}
+.tgl{margin-top:10px}
+.days{display:flex;gap:5px;margin-top:8px}
+.days .chip{flex:1;padding:9px 0;text-align:center}
+
+.next{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;margin-top:8px}
+.next.due{background:#FEF3F2;border-color:#F5CFCB}
+.next .nl{font-family:var(--display);font-size:11.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-2)}
+.next .nn{font-family:var(--display);font-weight:700;font-size:24px;margin-top:4px}
+.next .nd{font-size:13px;font-weight:600;color:var(--ink-2);margin-top:2px}
+.next.due .nd{color:#B23A2F}
+.row .tick{font-size:16px;flex:0 0 auto}
+.row .dt{font-family:var(--display);font-weight:600;font-size:13px;color:var(--ink-2);flex:0 0 auto}
+.row.plan{border-style:dashed;background:none}
+.sched{display:flex;align-items:center;gap:10px;padding:14px;background:var(--card);border:1px solid var(--line);
+  border-radius:16px;cursor:pointer;margin-top:10px}
+.sched .pl{flex:1;font-weight:600;font-size:13.8px}
+.sched .pv2{font-family:var(--display);font-weight:700;font-size:17px}
+.sched .pc{color:var(--ink-2);font-size:18px}
+.pickgrid .pk{font-size:18px}
+.pk small{display:block;font-family:var(--text);font-size:11px;font-weight:600;opacity:.6;margin-top:-10px}
+
+/* notification shade */
+.shade{background:#1C1B1F;min-height:100vh;padding:18px 12px;color:#E6E1E5;font-family:var(--text)}
+.shade .clock{font-size:44px;font-weight:400;padding:10px 8px 18px}
+.nf{background:#2B2930;border-radius:22px;padding:14px 14px 10px;margin-bottom:8px}
+.nf .nh{display:flex;align-items:center;gap:8px;font-size:12px;color:#CAC4D0}
+.nf .nh img{width:18px;height:18px;border-radius:50%}
+.nf .nt{font-weight:600;font-size:15px;margin-top:8px;color:#fff}
+.nf .na{display:flex;gap:6px;margin-top:10px}
+.nf .na button{flex:1;padding:10px 4px;border-radius:99px;border:0;background:#3B3840;color:#E6E1E5;
+  font-family:var(--text);font-weight:600;font-size:13px}
+.nf .na button.y{background:#2E7D4F;color:#fff}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* Ruby, born 23 Jul 2026. Today Mon 28 Sep, 9 weeks. who: t/e/r */
+const name={t:'Tom',e:'Eleanor',r:'Rob'};
+const go=h=>`onclick="location.hash='${h}'"`;
+const back=(label,h)=>`<button class="back" ${go(h)}>‹ ${label}</button>`;
+const tog=(label,on)=>`<div class="tgl${on?' on':''}" onclick="this.classList.toggle('on')"><div class="tn">${label}</div><div class="tb"></div></div>`;
+const foot=(h,saveLabel='Save')=>`<div class="sfoot"><button class="save ghost half" ${go(h)}>Cancel</button><button class="save half" ${go(h)}>${saveLabel}</button></div>`;
+
+const W=[
+  {wk:8,  kg:3.4,d:'17 Sep',who:'t',vet:true},
+  {wk:8.6,kg:3.7,d:'21 Sep',who:'e'},
+  {wk:9.6,kg:3.9,d:'28 Sep',who:'t'},
+];
+
+const T=[ // today, newest first
+  {t:'17:30',k:'o',w:'Wee',who:'t'},
+  {t:'16:40',k:'o',w:'Wee + poo',who:'t'},
+  {t:'15:05',k:'n',w:'Wee',who:'e'},
+  {t:'14:20',k:'o',w:'Wee',who:'e'},
+  {t:'12:55',k:'o',w:'Wee',who:'r'},
+  {t:'11:30',k:'n',w:'Wee',who:'r'},
+  {t:'10:10',k:'o',w:'Poo',who:'e'},
+  {t:'08:45',k:'o',w:'Wee',who:'t'},
+  {t:'07:05',k:'o',w:'Wee + poo',who:'t'},
+];
+const WK=[['T',5,4],['W',6,3],['T',7,3],['F',7,2],['S',8,2],['S',6,3],['M',7,2]]; // day, out, in
+
+function chart(){
+  const w=320,h=190,l=30,r=10,t=10,b=24,lo=3,hi=4.5,w0=8,w1=10;
+  const x=wk=>l+(wk-w0)/(w1-w0)*(w-l-r), y=kg=>t+(hi-kg)/(hi-lo)*(h-t-b);
+  let g='';
+  for(let k=lo;k<=hi;k+=0.5) g+=`<line x1="${l}" x2="${w-r}" y1="${y(k)}" y2="${y(k)}" stroke="var(--line)"/>
+    <text x="${l-7}" y="${y(k)+3.5}" text-anchor="end">${k}</text>`;
+  for(let wk=w0;wk<=w1;wk++) g+=`<text x="${x(wk)}" y="${h-6}" text-anchor="middle">${wk}w</text>`;
+  const line=`<polyline fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"
+    points="${W.map(p=>x(p.wk)+','+y(p.kg)).join(' ')}"/>`;
+  const col={t:'var(--tom)',e:'var(--elle)',r:'var(--rob)'};
+  const dots=W.map(p=>`<circle cx="${x(p.wk)}" cy="${y(p.kg)}" r="5.5" fill="${col[p.who]}" stroke="#fff" stroke-width="2"/>`).join('');
+  return `<div class="card chart"><svg viewBox="0 0 ${w} ${h}">${g}${line}${dots}</svg></div>`;
+}
+
+/* ---------- home ---------- */
+const home=(due)=>`<div class="scroll">
+  <div class="hero"><div class="pup">🐩</div><div><div class="pup-n">Ruby</div><div class="pup-a">9 weeks</div></div></div>
+  <div class="board"><h3><span>This week</span><em>21 points</em></h3>
+    <div class="tug"><div class="t" style="width:19%">4</div><div class="r" style="width:81%">17</div></div>
+    <div class="keyrow"><span><i class="t"></i>Tom</span><span><i class="e"></i>Eleanor</span><span><i class="r"></i>Rob</span></div>
+    <div class="boardfoot"><span>🏅 Rob</span><span></span></div></div>
+  <div class="grid">
+    <div class="tile wide" ${go(due?'toilet-due':'toilet')}><div class="ic">🌳</div>
+      <div class="wb"><div class="tl">Toilet training</div></div>
+      <div class="cd${due?' due':''}">${due?'Now':'11 min'}</div></div>
+    <div class="tile"><div class="ic">🌍</div><div class="tl">Socialisation</div>
+      <div class="lv"><b>16</b> of 80 · 1 bad</div><div class="mini"><i style="width:20%"></i></div>
+      <span class="pill urgent">44 days</span></div>
+    <div class="tile"><div class="ic">🦴</div><div class="tl">Training</div>
+      <div class="lv"><b>7</b> commands</div><span class="pill">7 stale</span></div>
+    <div class="tile"><div class="ic">🚪</div><div class="tl">Alone</div>
+      <div class="lv">Not started</div></div>
+    <div class="tile"><div class="ic">✂️</div><div class="tl">Grooming</div>
+      <div class="lv">Step <b>1</b> of 9</div></div>
+    <div class="tile wide" ${go('health')}><div class="ic">🩺</div>
+      <div class="wb"><div class="tl">Health</div>
+        <div class="hl due"><b>2nd jab Thu</b></div>
+        <div class="hl"><b>3.9 kg</b> · worming 5 Oct</div></div></div>
+  </div>
+  <div class="lab">Today</div>
+  <div class="ev"><div class="dot t">T</div><div class="tx"><b>Outside</b> wee<i>Tom · 5 min ago</i></div><div class="pts">+1</div></div>
+  <div class="ev"><div class="dot t">T</div><div class="tx"><b>Weight</b> 3.9 kg<i>Tom · 1h ago</i></div><div class="pts">+1</div></div>
+  <div class="ev"><div class="dot e">E</div><div class="tx"><b>Inside</b> wee<i>Eleanor · 2h ago</i></div></div>
+</div>`;
+
+/* ---------- toilet ---------- */
+function toilet(state){
+  const timer = state==='off'
+    ? `<div class="timer off"><div class="tbig w">Toilet reminder</div>
+        <div class="trow"><button class="tb2" ${go('interval')}>Every 45 min</button><button class="tb2 go" ${go('toilet')}>Start</button></div></div>`
+    : state==='due'
+    ? `<div class="timer due"><div class="tbig w">Take her out</div><div class="sub">Due 4 min ago</div>
+        <div class="trow"><button class="tb2" ${go('toilet')}>+10 min</button><button class="tb2" ${go('toilet-off')}>Stop</button></div></div>`
+    : `<div class="timer"><div class="tbig">11 min</div><div class="sub">Next out 18:15</div>
+        <div class="trow"><button class="tb2" ${go('interval')}>Every 45 min</button><button class="tb2" ${go('toilet-off')}>Stop</button></div></div>`;
+  const max=Math.max(...WK.map(d=>d[1]+d[2]));
+  return `<div class="scroll">
+  ${back('Ruby','home')}
+  <div class="h">Toilet training</div>
+  ${timer}
+  <div class="today">
+    <div class="tal y"><div class="tn2">7</div><div class="tl2">outside today</div></div>
+    <div class="tal n"><div class="tn2">2</div><div class="tl2">inside today</div></div>
+  </div>
+  <div class="card" style="margin-top:10px;padding:0">
+    <div class="week">${WK.map(d=>`<div class="d"><i class="o" style="height:${d[1]/max*100}%"></i><i class="n" style="height:${d[2]/max*100}%"></i></div>`).join('')}</div>
+    <div class="wdays">${WK.map((d,i)=>`<span class="${i==6?'now':''}">${d[0]}</span>`).join('')}</div>
+  </div>
+  <div class="tpad">
+    <div class="seg"><button class="chip on" onclick="one(this)">Wee</button><button class="chip" onclick="one(this)">Poo</button><button class="chip" onclick="one(this)">Both</button></div>
+    <div class="tapzone" style="padding-top:0">
+      <button class="tapbtn y" onclick="tap(this)"><span class="ti">✓</span>Outside</button>
+      <button class="tapbtn n" onclick="tap(this)"><span class="ti">✗</span>Inside</button>
+    </div>
+  </div>
+  <div class="lab">Today</div>
+  ${T.map(e=>`<div class="row trow2"><div class="t">${e.t}</div><span class="k ${e.k}">${e.k=='o'?'Outside':'Inside'}</span>
+    <div class="lbl">${e.w}<i>${name[e.who]}</i></div></div>`).join('')}
+</div>`;
+}
+
+const interval=()=>toilet('on')+`<div class="modal"><div class="sheet">
+  <div class="grab"></div><div class="sh">Take her out every</div>
+  <div class="pickgrid">
+    ${['20 min','30 min','45 min','1 hr','1½ hr','2 hr','3 hr','4 hr','Other'].map(v=>`<div class="pk${v=='45 min'?' on':''}" onclick="one(this)">${v}</div>`).join('')}
+  </div>
+  ${tog('Restart after outside',true)}
+  ${foot('toilet')}
+</div></div>`;
+
+const notify=()=>`<div class="shade">
+  <div class="clock">18:15</div>
+  <div class="nf"><div class="nh"><img src="icon.png">Dog Log · now</div>
+    <div class="nt">Take Ruby out</div>
+    <div class="na"><button class="y">Outside</button><button>Inside</button><button>+10 min</button></div></div>
+  <div class="nf"><div class="nh"><img src="icon.png">Dog Log · 09:00</div>
+    <div class="nt">Worming due today</div>
+    <div class="na"><button class="y">Given</button><button>Tomorrow</button></div></div>
+  <div class="nf"><div class="nh"><img src="icon.png">Dog Log · Mon 09:00</div>
+    <div class="nt">Weigh Ruby</div></div>
+  <div class="nf"><div class="nh"><img src="icon.png">Dog Log · Wed 09:00</div>
+    <div class="nt">2nd jab tomorrow</div></div>
+</div>`;
+
+/* ---------- health ---------- */
+const health=()=>`<div class="scroll">
+  ${back('Ruby','home')}
+  <div class="h">Health</div>
+  <div class="card hcard" style="margin-top:8px" ${go('weight')}><div class="ic">⚖️</div>
+    <div class="hb"><div class="ht">Weight</div><div class="hv"><b>3.9 kg</b> · +0.2 this week</div></div></div>
+  <div class="card hcard" ${go('jabs')}><div class="ic">💉</div>
+    <div class="hb"><div class="ht">Vaccinations</div><div class="hv"><b>2nd jab</b> · Thu 1 Oct</div></div><span class="pill urgent">3 days</span></div>
+  <div class="card hcard" ${go('worming')}><div class="ic">🪱</div>
+    <div class="hb"><div class="ht">Worming</div><div class="hv"><b>Every 2 weeks</b> · next 5 Oct</div></div><span class="pill">7 days</span></div>
+</div>`;
+
+const weight=()=>`<div class="scroll">
+  ${back('Health','health')}
+  <div class="h">Weight</div>
+  <div class="wnow"><div class="kg">3.9<span>kg</span></div><div class="dl">+0.2 this week</div></div>
+  ${chart()}
+  ${tog('Weekly reminder',true)}
+  <div class="days">${['M','T','W','T','F','S','S'].map((d,i)=>`<button class="chip${i==0?' on':''}" onclick="one(this)">${d}</button>`).join('')}</div>
+  <div class="lab">Weigh-ins</div>
+  ${W.slice().reverse().map((p,i,a)=>{const prev=a[i+1];return `<div class="row wrow">
+    <div class="dot ${p.who}">${p.who.toUpperCase()}</div>
+    <div class="lbl">${p.d}<i>${Math.floor(p.wk)} weeks · ${name[p.who]}${p.vet?' · vet':''}</i></div>
+    <div class="dd">${prev?'+'+(p.kg-prev.kg).toFixed(1):''}</div>
+    <div class="kg2">${p.kg.toFixed(1)}</div></div>`}).join('')}
+</div>
+<div class="dock"><button class="save" ${go('weigh')}>Weigh Ruby</button></div>`;
+
+const weigh=()=>weight()+`<div class="modal"><div class="sheet">
+  <div class="grab"></div><div class="sh">Weigh Ruby</div>
+  <div class="kgstep"><button class="sbtn" onclick="kg(-1)">−</button>
+    <div class="bigkg" id="kg">3.9<span>kg</span></div>
+    <button class="sbtn" onclick="kg(1)">+</button></div>
+  <div class="lastw">Last 3.9 kg · today</div>
+  <div class="lab">When</div>
+  <div class="seg"><button class="chip on" onclick="one(this)">Today</button><button class="chip" onclick="one(this)">Yesterday</button><button class="chip" onclick="one(this)">Pick a date</button></div>
+  ${tog('At the vet',false)}
+  ${foot('weight')}
+</div></div>`;
+
+const jabs=()=>`<div class="scroll">
+  ${back('Health','health')}
+  <div class="h">Vaccinations</div>
+  <div class="next due" ${go('jab-given')}><div class="nl">Next</div><div class="nn">2nd jab</div><div class="nd">Thu 1 Oct · 3 days</div></div>
+  ${tog('Remind me the day before',true)}
+  <div class="lab">Due</div>
+  <div class="row plan" ${go('jab-given')}><div class="tick">○</div><div class="lbl">2nd jab<i>DHP + Lepto</i></div><div class="dt">1 Oct</div></div>
+  <div class="row plan"><div class="tick">○</div><div class="lbl">Booster<i>Lepto</i></div><div class="dt">1 Oct 2027</div></div>
+  <div class="lab">Given</div>
+  <div class="row ok"><div class="tick">✓</div><div class="lbl">1st jab<i>DHP + Lepto · Tom</i></div><div class="dt">17 Sep</div></div>
+</div>
+<div class="dock"><button class="save" ${go('jab-add')}>Add vaccination</button></div>`;
+
+const jabSheet=(title,which,given)=>jabs()+`<div class="modal"><div class="sheet">
+  <div class="grab"></div><div class="sh">${title}</div>
+  <div class="lab">Which</div>
+  <div class="seg" style="flex-wrap:wrap">${['1st jab','2nd jab','Booster','Kennel cough','Rabies','+ Other'].map(v=>`<button class="chip${v==which?' on':''}" onclick="one(this)">${v}</button>`).join('')}</div>
+  <div class="lab">Given</div>
+  <div class="seg">${(given?['Today','Yesterday','Pick a date']:['Not yet','Today','Pick a date']).map((v,i)=>`<button class="chip${i==0?' on':''}" onclick="one(this)">${v}</button>`).join('')}</div>
+  <div class="lab">Next due</div>
+  <div class="seg" style="flex-wrap:wrap">${['None','2 weeks','4 weeks','1 year','3 years','Pick a date'].map(v=>`<button class="chip${v=='1 year'?' on':''}" onclick="one(this)">${v}</button>`).join('')}</div>
+  ${foot('jabs')}
+</div></div>`;
+
+const worming=()=>`<div class="scroll">
+  ${back('Health','health')}
+  <div class="h">Worming</div>
+  <div class="next"><div class="nl">Next</div><div class="nn">Mon 5 Oct</div><div class="nd">7 days</div></div>
+  <div class="sched" ${go('worm-schedule')}><div class="pl">Every</div><div class="pv2">2 weeks</div><div class="pc">›</div></div>
+  ${tog('Remind me',true)}
+  <div class="lab">Given</div>
+  <div class="row ok"><div class="tick">✓</div><div class="lbl">Milbemax<i>Eleanor</i></div><div class="dt">21 Sep</div></div>
+  <div class="row ok"><div class="tick">✓</div><div class="lbl">Panacur<i>Breeder</i></div><div class="dt">7 Sep</div></div>
+</div>
+<div class="dock"><button class="save green" ${go('worm-given')}>Given today</button></div>`;
+
+const wormSchedule=()=>worming()+`<div class="modal"><div class="sheet">
+  <div class="grab"></div><div class="sh">Worm every</div>
+  <div class="pickgrid">
+    ${['2 weeks','4 weeks','1 month','3 months','6 months','Other'].map(v=>`<div class="pk${v=='2 weeks'?' on':''}" onclick="one(this)">${v}</div>`).join('')}
+  </div>
+  ${foot('worming')}
+</div></div>`;
+
+const wormGiven=()=>worming()+`<div class="modal"><div class="sheet">
+  <div class="grab"></div><div class="sh">Wormed today</div>
+  <div class="lab">What</div>
+  <div class="seg" style="flex-wrap:wrap">${['Milbemax','Panacur','Drontal','+ Other'].map((v,i)=>`<button class="chip${i==0?' on':''}" onclick="one(this)">${v}</button>`).join('')}</div>
+  <div class="lab">When</div>
+  <div class="seg"><button class="chip on" onclick="one(this)">Today</button><button class="chip" onclick="one(this)">Yesterday</button><button class="chip" onclick="one(this)">Pick a date</button></div>
+  ${foot('worming')}
+</div></div>`;
+
+const S={
+  home:()=>home(false),
+  'home-due':()=>home(true),
+  toilet:()=>toilet('on'),
+  'toilet-due':()=>toilet('due'),
+  'toilet-off':()=>toilet('off'),
+  interval, notify, health, weight, weigh, jabs,
+  'jab-add':()=>jabSheet('Add vaccination','Kennel cough',false),
+  'jab-given':()=>jabSheet('2nd jab','2nd jab',true),
+  worming, 'worm-schedule':wormSchedule, 'worm-given':wormGiven,
+};
+
+let v=3.9;
+function kg(d){v=Math.max(0,Math.round((v+d*0.1)*10)/10);document.getElementById('kg').innerHTML=v.toFixed(1)+'<span>kg</span>';}
+function one(b){[...b.parentNode.children].forEach(c=>c.classList.remove('on'));b.classList.add('on');}
+function tap(b){b.animate([{transform:'scale(.94)'},{transform:'scale(1)'}],{duration:180});}
+function render(){const k=(location.hash||'#home').slice(1);document.getElementById('app').innerHTML=(S[k]||S.home)();v=3.9;window.scrollTo(0,0);}
+addEventListener('hashchange',render);render();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "coverageAnalysis": "perTest",
+  "ignoreStatic": true,
+  "mutate": ["src/stores/chatStore.ts", "src/lib/deliveryTracker.ts", "src/lib/connection.ts", "src/lib/voiceCall.ts", "src/lib/badge.ts"],
+  "reporters": ["clear-text", "progress"],
+  "concurrency": 6,
+  "timeoutMS": 20000,
+  "clearTextReporter": { "maxTestsToLog": 0, "reportTests": false, "reportMutants": false }
+}

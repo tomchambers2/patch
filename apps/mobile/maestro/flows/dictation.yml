@@ -1,0 +1,73 @@
+# Maestro visual flow for the composer's mic (Todoist 6hf6pj93JHQ6w93c: "Patch
+# mobile dictation needs proper tests covering it, visual ones").
+#
+# Dictation is already covered thoroughly at the layers a simulated renderer
+# can reach — apps/mobile/__tests__/dictation.test.ts,
+# composerDictation.integration.test.tsx and Composer.dictationListening.test.tsx
+# all prove the state machine and what it renders into a fake tree. None of
+# that proves what the SCREEN actually looks like on a real device, which is
+# what this flow is for (spec/19-testing.md § Surface): the real listening
+# strip, the real "Transcribing…" state and the real clear-dictation control,
+# with a screenshot at each so a visual regression is visible even when
+# nothing throws.
+#
+# Pre-req: same as smoke.yml — device has the dev/preview build installed, the
+# test stack is running, and a valid pairing JWT is supplied via CRED.
+# `permissions` grants the mic up front so the OS consent dialog (which this
+# flow has no step to dismiss) never blocks the walk — the app itself still
+# resolves that permission on its own when the composer mounts (spec/07 §
+# "Dictation into the composer"); priming it here is purely about keeping the
+# emulator's dialog out of the way.
+#
+# Usage:
+#   maestro test apps/mobile/maestro/flows/dictation.yml --env CRED=<JWT> --env SERVER=<origin>
+
+appId: io.github.tomchambers2.patch
+---
+- launchApp:
+    clearState: true
+    permissions:
+      microphone: allow
+      notifications: allow
+
+- openLink: 'patch://?credential=${CRED}&server=${SERVER}'
+- assertVisible: 'Channels'
+
+# Dictation only exists inside a chat's composer.
+- assertVisible: 'Manager'
+- tapOn: 'Manager'
+- takeScreenshot: D1-idle-composer
+
+# A genuine TAP starts a hands-free dictation (spec/07: never a hold) — the
+# listening strip replaces the keyboard, named and pulsing.
+- tapOn: 'Dictate into message'
+- assertVisible: 'Listening'
+- takeScreenshot: D2-listening
+
+# The clear control discards without transcribing (`lib/dictation.ts`
+# finish(false)) — back to idle, nothing appended to the draft.
+- tapOn: 'Clear dictation'
+- assertNotVisible: 'Listening'
+- takeScreenshot: D3-cancelled-back-to-idle
+
+# Real gesture again, this time carried to a commit: tap to start, tap again to
+# end. The second tap targets the SAME label as the first — "Dictate into
+# message" holds through the whole `recording` state and only changes once
+# `commitDictation` flips it to `transcribing`.
+- tapOn: 'Dictate into message'
+- assertVisible: 'Listening'
+- tapOn: 'Dictate into message'
+- assertVisible: 'Transcribing…'
+- takeScreenshot: D4-transcribing
+
+# However the clip comes back — real words, or one of the three "nothing was
+# said" outcomes spec/07 requires to be non-silent — the strip must clear and
+# the mic must return to an idle, re-tappable state. The transcript text
+# itself is not asserted here: what it says depends on the test stack's STT
+# and the emulator's own microphone, and is already pinned exactly by
+# dictation.test.ts and composerDictation.integration.test.tsx. This is only
+# proving the screen settles, visibly, whatever the words were.
+- extendedWaitUntil:
+    visible: 'Dictate into message'
+    timeout: 15000
+- takeScreenshot: D5-settled-after-commit

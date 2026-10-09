@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — mobile · chat detail (low-fi v01)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --voice: #b73a3a;
+    --diff-add: #e3f5e3;
+    --diff-del: #fbe3e3;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 24px 0;
+    background: #ddd;
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  .phone-frame {
+    width: 412px;
+    height: 915px;
+    margin: 0 auto;
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    border-radius: 32px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* status bar */
+  .status-bar {
+    height: 36px;
+    padding: 0 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  /* nav bar */
+  .nav-bar {
+    padding: 6px 14px 10px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .nav-bar .back { font-size: 22px; color: var(--ink); width: 24px; text-align: left; }
+  .nav-bar .title { font-weight: 600; font-size: 16px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-bar .title .folder { color: var(--muted); font-size: 11px; font-weight: 400; font-family: ui-monospace, monospace; display: block; line-height: 1.2; margin-bottom: 2px; }
+  .nav-bar .right { display: flex; gap: 8px; }
+  .nav-bar .icon-btn {
+    width: 32px; height: 32px;
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    background: var(--bg);
+  }
+
+  /* status pill row */
+  .status-row {
+    padding: 6px 18px;
+    border-bottom: 1px solid var(--fill);
+    display: flex; gap: 8px; align-items: center;
+    background: var(--fill);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .status-row .badge {
+    color: var(--running);
+    font-weight: 600;
+  }
+
+  /* stream */
+  .stream {
+    flex: 1;
+    overflow: hidden;
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .msg.user { background: var(--fill); }
+  .msg .role {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.05em;
+  }
+  .tool {
+    padding: 6px 10px;
+    border: 1px dashed var(--line);
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* permission card */
+  .perm-card {
+    border: 2px solid var(--waiting);
+    background: #fff8e9;
+    padding: 12px;
+  }
+  .perm-card .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--waiting);
+    font-weight: 600;
+    margin-bottom: 6px;
+    letter-spacing: 0.05em;
+  }
+  .perm-card .question { font-size: 14px; margin-bottom: 10px; }
+  .perm-card .actions { display: flex; gap: 8px; }
+  .perm-card .btn {
+    flex: 1; text-align: center; padding: 10px;
+    font-size: 14px;
+    border: 1px solid var(--ink);
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .perm-card .btn.approve { background: var(--ink); color: var(--bg); }
+
+  /* diff preview block (mini, tappable) */
+  .diff-preview {
+    border: 1px solid var(--line);
+    background: var(--fill);
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 8px 10px;
+  }
+  .diff-preview .head {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    display: flex; gap: 8px;
+  }
+  .diff-preview .head .file { color: var(--ink); font-weight: 500; }
+  .diff-preview .add { background: var(--diff-add); display: block; padding: 0 4px; }
+  .diff-preview .del { background: var(--diff-del); display: block; padding: 0 4px; }
+  .diff-preview .expand-hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+    text-align: right;
+  }
+
+  /* composer */
+  .composer {
+    border-top: 1px solid var(--line);
+    padding: 10px 12px 14px;
+    display: flex; gap: 8px; align-items: flex-end;
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  .composer .input {
+    flex: 1;
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+    min-height: 40px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .composer .icon-btn {
+    width: 40px; height: 40px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .composer .icon-btn.mic { font-size: 18px; }
+  .composer .icon-btn.send { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="phone-frame">
+
+  <!-- status bar -->
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>5G · ▮▮▮▮</span>
+  </div>
+
+  <!-- nav bar -->
+  <div class="nav-bar">
+    <span class="back">←</span>
+    <div class="title">
+      <span class="folder">~/projects/bed-planner</span>
+      fix layout bug
+    </div>
+    <span class="right">
+      <span class="icon-btn">🎙</span>
+      <span class="icon-btn">⋯</span>
+    </span>
+  </div>
+
+  <!-- status pill row -->
+  <div class="status-row">
+    <span class="badge">● running</span>
+    <span>·</span>
+    <span>started 2m ago</span>
+  </div>
+
+  <!-- stream -->
+  <div class="stream">
+
+    <div class="msg user">
+      <div class="role">you</div>
+      fix the layout bug — the right column overlaps the editor on narrow screens.
+    </div>
+
+    <div class="msg">
+      <div class="role">claude</div>
+      I'll read the layout file first.
+    </div>
+
+    <div class="tool">▸ read_file src/layout.ts → 142 lines</div>
+
+    <div class="msg">
+      <div class="role">claude</div>
+      Found it — the grid has a fixed 400px column. I'll switch to minmax. Need your OK to write.
+    </div>
+
+    <!-- permission card (Approve / Deny inline) -->
+    <div class="perm-card">
+      <div class="label">! permission</div>
+      <div class="question">Write to <b>src/layout.ts</b>?</div>
+
+      <div class="diff-preview">
+        <div class="head"><span class="file">src/layout.ts</span><span>+1 / −1</span></div>
+        <span class="del">−   grid: '400px 1fr',</span>
+        <span class="add">+   grid: 'minmax(280px, 1fr) 1fr',</span>
+        <div class="expand-hint">tap to expand →</div>
+      </div>
+
+      <div class="actions" style="margin-top: 10px;">
+        <span class="btn">Deny</span>
+        <span class="btn approve">Approve</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- composer -->
+  <div class="composer">
+    <div class="input">Type a message…</div>
+    <span class="icon-btn mic">🎙</span>
+    <span class="icon-btn send">▸</span>
+  </div>
+
+</div>
+
+</body>
+</html>

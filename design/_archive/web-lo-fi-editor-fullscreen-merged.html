@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · diff full-screen (low-fi v02)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --diff-add: #e3f5e3;
+    --diff-del: #fbe3e3;
+    --diff-add-strong: #2a8f3e;
+    --diff-del-strong: #b73a3a;
+    --pane-head: #ececec;
+    --hover: #fff7c8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .stage {
+    width: 1280px;
+    height: 800px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-rows: 44px 1fr 32px;
+    grid-template-columns: 240px 6px 1fr;
+  }
+  .gutter {
+    grid-row: 2;
+    grid-column: 2;
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    cursor: col-resize;
+    position: relative;
+  }
+  .gutter::before {
+    content: '⋮';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  /* top header */
+  .head {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--line);
+    padding: 0 14px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--fill);
+  }
+  .head .crumb { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
+  .head .file { font-family: ui-monospace, monospace; font-size: 13px; font-weight: 500; }
+  .head .right { margin-left: auto; display: flex; gap: 6px; }
+  .head .ctrl { font-size: 12px; border: 1px solid var(--line); padding: 2px 10px; background: var(--bg); }
+  .head .ctrl.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  /* change-set sidebar (files in this edit) */
+  .changeset {
+    grid-column: 1; grid-row: 2;
+    background: var(--fill);
+    padding: 8px 0;
+    overflow: hidden;
+  }
+  .changeset .h {
+    padding: 4px 14px 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .changeset .item {
+    padding: 4px 14px;
+    display: flex; gap: 8px; align-items: baseline;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+  }
+  .changeset .item.active { background: var(--bg); border-left: 2px solid var(--ink); padding-left: 12px; }
+  .changeset .item .stat { color: var(--muted); font-size: 11px; }
+  .changeset .item .stat .add { color: var(--diff-add-strong); }
+  .changeset .item .stat .del { color: var(--diff-del-strong); }
+
+  /* the diff itself */
+  .diff-wrap {
+    grid-column: 3; grid-row: 2;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .diff-meta {
+    border-bottom: 1px solid var(--line);
+    background: var(--pane-head);
+    padding: 4px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex; gap: 14px; align-items: center;
+  }
+  .diff-meta b { color: var(--ink); }
+  .diff {
+    flex: 1;
+    padding: 8px 0;
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow: hidden;
+    white-space: pre;
+  }
+  .diff .line { display: block; padding: 0 14px 0 0; }
+  .diff .ln {
+    display: inline-block;
+    width: 56px;
+    color: var(--faded);
+    user-select: none;
+    text-align: right;
+    padding-right: 10px;
+  }
+  .diff .add { background: var(--diff-add); }
+  .diff .del { background: var(--diff-del); }
+  .diff .add .ln { color: var(--diff-add-strong); }
+  .diff .del .ln { color: var(--diff-del-strong); }
+  .diff .editable { background: var(--hover); border: 1px dashed #c8b400; outline: none; cursor: text; }
+  .diff .hunk-sep {
+    display: block;
+    background: var(--pane-head);
+    color: var(--muted);
+    padding: 1px 14px;
+    font-size: 11px;
+  }
+
+  /* footer */
+  .foot {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line);
+    background: var(--fill);
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 14px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .foot .right { margin-left: auto; display: flex; gap: 14px; }
+  .foot b { color: var(--ink); }
+
+  .caption {
+    width: 1280px; margin: 8px auto 0;
+    color: var(--muted);
+    font-size: 12px;
+    display: flex; gap: 20px; flex-wrap: wrap;
+  }
+  .caption b { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- top header -->
+  <div class="head">
+    <span class="crumb">~/projects/bed-planner / fix layout bug /</span>
+    <span class="file">src/layout.ts</span>
+    <span class="right">
+      <span class="ctrl primary">[Save]</span>
+      <span class="ctrl">⤢ collapse</span>
+      <span class="ctrl">×</span>
+    </span>
+  </div>
+
+  <!-- change-set sidebar (multiple files in one edit) -->
+  <div class="changeset">
+    <div class="h">change set</div>
+    <div class="item active">src/layout.ts <span class="stat"><span class="add">+3</span> <span class="del">−1</span></span></div>
+    <div class="item">src/components/Sidebar.tsx <span class="stat"><span class="add">+1</span></span></div>
+    <div class="item">test/layout.test.ts <span class="stat"><span class="add">+12</span></span></div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <!-- the diff -->
+  <div class="diff-wrap">
+    <div class="diff-meta">
+      <span>+3 / −1 · 1 hunk</span>
+      <span>edited by agent <b>2m ago</b></span>
+      <span>chat is <b>idle</b> — diff is editable</span>
+    </div>
+
+    <div class="diff"><span class="line"><span class="ln">1   1</span>  export const layout = {</span><span class="line"><span class="ln">2   2</span>    rows: 2,</span><span class="line del"><span class="ln">3    </span>−   grid: '400px 1fr',</span><span class="line add"><span class="ln">    3</span>+   <span class="editable">grid: 'minmax(280px, 1fr) 1fr',</span></span><span class="line"><span class="ln">4   4</span>  }</span><span class="line"><span class="ln">5   5</span></span><span class="line"><span class="ln">6   6</span>  // the old layout used a fixed</span><span class="line"><span class="ln">7   7</span>  // 400px right column, which broke</span><span class="line"><span class="ln">8   8</span>  // at narrow viewports because the</span><span class="line"><span class="ln">9   9</span>  // editor would overlap.</span><span class="hunk-sep">@@ … context truncated (no further changes in file) @@</span></div>
+  </div>
+
+  <!-- status bar -->
+  <div class="foot">
+    <span><b>src/layout.ts</b> · TypeScript · 142 lines</span>
+    <span>UTF-8 · LF</span>
+    <span class="right">
+      <span>⌘S save · Esc collapse · j/k next-prev hunk</span>
+    </span>
+  </div>
+
+</div>
+
+</body>
+</html>

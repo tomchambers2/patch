@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Required for Electron + hardened runtime + JIT (V8). -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <!-- REQUIRED because we sign with a SELF-SIGNED certificate rather than an
+       Apple Developer ID (spec/11 § Desktop code signing).
+
+       Hardened runtime enforces that a process and the libraries it maps share a
+       Team ID. A self-signed certificate has no Team ID at all
+       (`TeamIdentifier=not set`), so macOS cannot establish that Patch and its own
+       embedded Electron framework are the same team, and refuses to load it:
+
+         Library not loaded: @rpath/Electron Framework.framework/Electron Framework
+         Reason: mapping process and mapped file (non-platform) have different Team IDs
+
+       The app crashes at launch (SIGABRT, DYLD "Library missing") without this.
+
+       TRADE-OFF, accepted deliberately: this lets the app load libraries not signed
+       by us, a real if modest reduction in hardening. It is the price of self-signed
+       code signing, which is what makes auto-update work at all — Squirrel refuses
+       to apply an update to an adhoc-signed app. A paid Developer ID would supply
+       the Team ID and let this be removed. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- Microphone for the voice-note overlay (group 19). -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <!-- Network client for talking to the patch server. -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+</dict>
+</plist>

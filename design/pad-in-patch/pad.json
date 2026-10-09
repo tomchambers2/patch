@@ -1,0 +1,4 @@
+{ "screens": [
+  { "id": "pads",  "name": "Pads",          "path": "index.html#pads" },
+  { "id": "open",  "name": "A Pad open",    "path": "index.html#open" },
+  { "id": "start", "name": "Starting a Pad","path": "index.html#start" } ] }

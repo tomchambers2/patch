@@ -1,0 +1,443 @@
+[
+  {
+    "group-id": "B1",
+    "name": "Wire protocol conformance",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [],
+    "tasks": [
+      {
+        "task": "The event protocol carried between server and clients is the single shared contract every surface and the daemon depend on, so its definition must match the spec exactly and reject anything that doesn't. Every event the spec defines — session events flowing daemon-to-surface (chat spawned, message, tool call, tool result, permission request, state, stopped, error, daemon online/offline/unauthenticated), surface-to-daemon events (input with an idempotency key and optional source, permission response, spawn request with its own separate idempotency space, stop, resume, focus change, file write, heartbeat, foreground/background), cross-chat events, notification events, and control events (hello with client type/version and optional auth credential, ack with per-chat sequence, replay from a sequence) — must round-trip encode and decode and carry exactly the fields the spec lists, no more and no fewer. Decoding is strict: unknown keys, missing required fields, and malformed frames are rejected loudly with a bounded, payload-safe error rather than silently coerced or defaulted. Cross-field invariants are enforced at decode time, not merely defined: in particular a permission response that says edits were applied must carry the edited content, and a response that omits it must not claim edits — an inconsistent response is rejected at the codec layer. Reconcile any field that exists in the code but not the spec (for example an identifier on tool-call and tool-result events): either the spec is updated to include it as the authoritative contract or it is removed from the code, but the two must agree. Sequence numbers are monotonic per chat and never rewound, and replay requests reference a starting sequence. Verify the current implementation against this behaviour — much may already exist — and close the gaps, including the unhappy paths and the negative cases (reject, don't fall back).",
+        "spec_sections": [
+          "03-wire-protocol.md (entire file — all event definitions, encoding, strict rejection, sequence/replay)",
+          "principles.md ## No fallbacks",
+          "12-error-and-offline.md (replay and sequence semantics)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B2",
+    "name": "Server core: auth, relay, presence, registry",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1"],
+    "tasks": [
+      {
+        "task": "The server is a dumb relay, registry, and ingress endpoint that makes no model calls. It must support the full account and device-linking lifecycle: bootstrapping an account from an Ed25519 identity (idempotent for the same key, rejected as a conflict for a different key), QR-code pairing where a short-lived single-use nonce is issued, a surface signs a credential bound to that nonce and its own public key, and the server verifies the binding, registers the surface, and refuses expired, reused, unbound, or badly-signed credentials. Surface credentials are time-bounded JWTs (with the voice-device exception that carries no expiry), verified on every WebSocket hello, and revocation both removes a surface and terminates any live connection for it. The server tracks presence per account and surface from heartbeats, marks surfaces stale after the inactivity window, and exposes a presence snapshot used by notification routing. It relays surface events to the daemon and fans daemon events back out, routing detail-level events only to subscribed surfaces, account-level events to all, and per-surface replay only to the requesting surface. The daemon-to-server link authenticates with a challenge/response and rejects bad credentials with no fallback; while the daemon is offline the server buffers surface-bound events with a bounded cap (dropping oldest with a warning) and drains them in order on reconnect. All of this is largely implemented — verify each behaviour against the running code and close any gaps, paying attention to the unhappy paths (missing/expired/invalid credentials, unknown surfaces, malformed frames, timeouts) which must surface as explicit errors or close codes rather than silent defaults.",
+        "spec_sections": [
+          "01-server.md (entire file — relay, registry, presence, push fanout, ingress, voice token)",
+          "10-auth.md (entire file — Ed25519 identity, QR pairing, daemon key, surface JWT lifecycle, revocation, trust model)",
+          "00-overview.md ## Permission model",
+          "principles.md ## No fallbacks"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B3",
+    "name": "Daemon session lifecycle and chat state",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1", "B2"],
+    "tasks": [
+      {
+        "task": "The daemon owns the lifecycle of every Claude Code session and is the source of truth for chat state. A chat is one session pinned to a folder that lives forever. Spawning validates the folder exists, allocates an identifier (honouring a server-allocated one when supplied), is idempotent on the caller's local identifier, initialises persistent metadata, and emits spawned and initial state events; spawning into a missing folder fails loudly. Sending user input is idempotent on the input's local identifier, queues the turn, un-archives an archived chat, and rejects unknown chats. Resuming hydrates from disk when not in memory, un-archives, and reconstructs the underlying Claude Code session from its native history identifier — and when that session identifier is missing or rejected the chat surfaces an explicit errored state and offers a fresh start rather than silently continuing. Stopping a running chat aborts the in-flight turn idempotently. Chat state transitions (idle, running, awaiting-permission, errored) are emitted, a per-chat sequence number is monotonic and persisted, metadata is written atomically, and the daemon hydrates all known chats to idle on startup. Pinning and unpinning are idempotent and persisted; pinned chats are exempt from the inactivity auto-archive sweep; manual archive/un-archive and new activity all behave per spec. History and replay read from Claude Code's native history, paginated and per-surface. Rate-limit mutating cross-chat operations and sandbox all file-listing to the chat's folder. Most of this is built and tested — verify against the code and close gaps, especially the unhappy paths (missing folder, duplicate identifiers, invalid session resume, unknown chat).",
+        "spec_sections": [
+          "02-daemon.md (entire file — session lifecycle, chat_state, schedule runner)",
+          "04-chats-and-folders.md (entire file — session model, folder pinning, history, resume, archive)",
+          "principles.md ## Non-interference"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B4",
+    "name": "Permission gating that actually applies decisions",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B3"],
+    "tasks": [
+      {
+        "task": "When Claude Code requests permission for a tool call, the user's decision must genuinely govern whether and how that tool runs. A permission request is surfaced to subscribed surfaces with enough context to decide, and for file-editing tools it includes the proposed change so it can be reviewed as a diff. The three outcomes must have real effect: approve lets the tool run as requested; deny prevents it from running at all; approve-with-edits runs the tool with the user's edited content substituted, not the original. The current implementation runs sessions in a skip-permissions mode and only emits a synthetic record after the fact, so a denial or an edited approval does not actually change what happened on disk — this must be corrected so the gate is applied before the tool executes (for example by driving Claude Code's own permission callback) and the edited content is what lands. Cover the unhappy paths: a permission response for an unknown request, a malformed response, an edited approval missing its content, and a response arriving after the chat moved on, must all be handled explicitly and never silently approve. While a chat is running or awaiting permission, human-side file writes from the editor are refused to avoid two writers colliding; once the chat is idle they are allowed.",
+        "spec_sections": [
+          "02-daemon.md (permission handling and chat_state awaiting-permission)",
+          "00-overview.md ## Permission model",
+          "14-design-web.md ## Diff editor (read-only lock and file.write refusal while running)",
+          "principles.md ## What we don't do (concurrency control vs permission policy)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B5",
+    "name": "Triggers, jobs, and spawn defaults",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B2", "B3"],
+    "tasks": [
+      {
+        "task": "A job is a trigger plus an action stored as JSON on the server, used only for things Claude Code cannot do alone: durable cross-session schedules, external event ingress, and cross-chat orchestration. Support all four trigger types — cron (expressions evaluated in UTC), generic inbound webhook, Google Calendar, and Todoist — each verifying its own authenticity (signature scheme exactly as declared with no fallback, channel token, or webhook secret) and rejecting mismatches loudly. Inbound payloads pass through a JSONata filter whose parse or evaluation failure is an explicit error, not a silent pass. A matching event fires the action: either spawn a fresh chat or send a message to an existing chat, with template rendering of the prompt/message. Two behaviours are currently wrong and must be fixed: a chat spawned by a job must default to archived (it is a background artifact that appears in the sidebar, not an interruption), not active; and the spawn action's folder must be optional, defaulting to the patch root when omitted, rather than required. Jobs have full CRUD plus enable/disable without deletion, observable run logs and inbound-webhook logs, and when the daemon is offline fired actions buffer per-job with a bounded drop-oldest cap and flush in order on reconnect. The cross-chat job tools are exposed to chats. Cover the unhappy paths: disabled job, unknown job, path-traversal identifiers, bad signature, filter error/reject, dispatch error. Most of this is built — verify and fix the two spawn-default defects and any gaps.",
+        "spec_sections": [
+          "08-triggers-and-jobs.md (entire file — cron, webhook, Calendar, Todoist, JSONata, actions, job storage)",
+          "day-in-the-life.md ## 1. Morning — silent check-in (spawned chat is the artifact, archived)",
+          "day-in-the-life.md ## 3. Home Assistant fix via Todoist",
+          "principles.md ## Non-interference (when a patch job is justified)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B6",
+    "name": "Notifications routing and speakers cascade",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B2", "B3"],
+    "tasks": [
+      {
+        "task": "The patch_notify tool lets a chat reach the user out-of-band across four channels — push, desktop, telegram, speakers — with a normal/urgent priority, and is fire-and-forget (not a reply mechanism). Routing is presence-aware: push is suppressed when any surface has heartbeat within the active window unless the notification is urgent, in which case it breaks through (patch implements no quiet hours of its own — the OS owns that). Desktop always fires to desktop surfaces. Telegram posts via the bot and fails loudly when the bot or pairing is missing. The speakers channel is the gap: it must resolve a target device — an explicitly named device when given, otherwise the most-recently-active device — and when no device is reachable it must cascade per spec (e.g. announce across devices at low volume / fall through to push as voicemail) rather than only logging an undelivered entry. Credentials for external channels should fail fast and visibly at startup, not lazily on first use. Special threads accumulate a broadcast sidecar: notifications on the telegram and speakers channels append context to the corresponding thread, a thread's own channel is suppressed to avoid self-loops while cross-channel broadcasts are kept, the sidecar is capped (oldest dropped), injected as context before the thread's next turn, and flushed after the turn commits — verify this injection and flush actually run in the daemon, not just in tests. The agent-initiated call rings mobile and desktop concurrently, first-accept wins, others stop, and a 30-second timeout falls back to push; state is garbage-collected. Cover unhappy paths (no tokens, no paired chat, no devices, spoofed source) and close the speakers and fail-fast gaps.",
+        "spec_sections": [
+          "09-notifications.md (entire file — channels, priority, presence suppression, speakers cascade, broadcast sidecars, call orchestration)",
+          "06-threads-manager-telegram-speakers.md (broadcast context injection and self-loop suppression)",
+          "day-in-the-life.md ## 6. Walk with headphones — Manager rings me",
+          "day-in-the-life.md ## 6b. Mid-afternoon — kitchen speaker"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B7",
+    "name": "Special threads and ingress contract",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B3", "B6"],
+    "tasks": [
+      {
+        "task": "Three special threads — Manager, Telegram, Speakers — are long-lived chats that exist from daemon boot, each with its own folder and a starter CLAUDE.md that patch creates empty (and never overwrites if the user has edited it); patch injects no system prompts at runtime, so behaviour comes only from those user-editable files. Manager is pinned at the top; Telegram and Speakers live in the Channels area. Each thread has a defined ingress contract that the whole system must honour: Telegram's ingress is inbound Telegram messages (validated by secret and sender allowlist) and its outbound replies auto-route back to Telegram; Speakers' ingress is audio from physical voice devices and its replies auto-route back to the originating device as speech. Because those two threads are not driven by typed input, their composer is read-only on the web and mobile surfaces — typing into them would create a reply that never reaches its real channel, so the composer must be disabled there (this is the contract this task owns even though the visual treatment is applied in the surface groups). The cross-chat tools (peek, send-to, spawn, history, list, stop, notify, call, job CRUD, device listing) are available uniformly to chats; the special threads are where they are meant to be used. Patch also ships a copyable Home-Assistant CLAUDE.md starter template for the desk-side pinned smart-home chat described in the product scenario, which is currently missing. Verify thread bootstrap, the Telegram and Speakers ingress/egress round-trips (including the unhappy paths: bad secret, disallowed sender, malformed update), and add the read-only-composer contract and the HA template.",
+        "spec_sections": [
+          "06-threads-manager-telegram-speakers.md (entire file — three threads, cross-chat tools, ingress/egress, CLAUDE.md seeding, composer policy)",
+          "principles.md ## No system-prompt injection",
+          "day-in-the-life.md ## 6b. Mid-afternoon — kitchen speaker (pinned HA chat + Speakers composer disabled)",
+          "05-surfaces.md (Channels section placement)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B8",
+    "name": "Voice daemon pipeline and focus-follow",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B2", "B3"],
+    "tasks": [
+      {
+        "task": "All voice surfaces stream audio to the daemon, which runs the self-hosted speech stack. An authenticated, single-use, short-lived voice token gates the audio WebSocket; a session enforces a concurrency cap and rejects excess sessions. Within a session the orchestrator moves through listening, transcribing, thinking, and speaking: voice-activity detection segments speech and triggers barge-in (cancelling in-progress synthesis when the user starts talking), echo cancellation is applied where the surface lacks its own, speech is transcribed (with a pluggable backend), the resulting turn is submitted to the target chat stamped with a voice-source prefix so the user's CLAUDE.md can react to it (this prefix is the one permitted piece of metadata patch attaches), the agent's reply is synthesised back as audio, and latency is reported. Focus-follow is the gap: when a surface signals which chat it is focused on, the daemon must route the next spoken turn to that chat — the routing setter exists but nothing currently consumes the focus-change signal, so wire it up so voice talks to the focused chat (and to Manager when none is focused). A permission prompt arising mid-voice-session must be answerable by voice and resume the session on response. Cover the unhappy paths: invalid/expired/replayed token, capacity exceeded, transcription failure, missing models (fail loudly, no fallback). Much of the pipeline is built — verify and close the focus-follow and voice-permission gaps.",
+        "spec_sections": [
+          "07-voice-app.md (entire file — STT/TTS, session orchestration, focus-follow, voice prefix, barge-in, permission-by-voice)",
+          "01-server.md (voice token mint)",
+          "principles.md ## No system-prompt injection (the voice prefix exception)",
+          "day-in-the-life.md ## 8. Design work — voice with one agent directly"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B9",
+    "name": "Voice device routing and outbound selection",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B8", "B7"],
+    "tasks": [
+      {
+        "task": "Standalone voice devices are first-class voice surfaces that an agent can both hear from and speak to. Inbound: a device's transcribed utterance lands in the Speakers thread tagged with its device identifier, and the agent's reply auto-routes back to that same device as speech. Outbound device selection must exist: the daemon maintains a registry of devices with their online/offline and muted state and last-active time, exposes a tool that lets an agent enumerate devices so it can reason about which one to address, and honours an explicit device target on a speakers notification — falling through to the next candidate when a chosen device is muted or offline. A one-way announcement (speak-only, no conversation) to a device must be supported distinctly from a two-way conversational turn. The voice-device chat receives the transcribed text plus the device identifier and has the normal tool set available. Cover the unhappy paths: unknown device, muted device, all devices offline (cascade to voicemail/push per the notifications contract), and concurrent sessions where a phone call takes priority. The inbound path and reply routing are partly built but the device-enumeration tool, outbound selection, and one-way announcement are missing — add them and verify the round-trip.",
+        "spec_sections": [
+          "16-voice-device.md (device presence, inbound transcript with deviceId, outbound routing, one-way announcement, mute fallthrough, device enumeration tool)",
+          "06-threads-manager-telegram-speakers.md (Speakers thread reply routing)",
+          "09-notifications.md (speakers channel device resolution and cascade)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B10",
+    "name": "Voice device firmware",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B8"],
+    "tasks": [
+      {
+        "task": "The standalone voice device firmware (HA Voice Preview Edition class hardware, ESP32-S3) is the physical Speakers surface. On wake-word detection it opens an audio session to the daemon and streams microphone PCM up and receives synthesised PCM down; a persistent control channel carries the lifecycle frames (hello, wake-detected, ring, ring-accepted, session-end, mute-changed). The LED ring reflects each state the spec enumerates (idle, wake-detected, listening, agent-speaking, ringing, muted, disconnected, pairing). The physical mute switch cuts the microphone, stops wake-word listening, and drops any audio session, and the daemon must not ring a muted device. Buttons handle accept/push-to-talk on short press and end-session/dismiss on long press. When the daemon rings the device (agent-initiated call) the device chimes and shows the ringing state, and an unanswered ring times out after the spec's window and falls through (to voicemail/push) rather than ringing forever. The device also plays one-way announcements: a speak-only delivery that does not open a listening turn. Device provisioning/pairing assigns its identifier and daemon host, and firmware updates are delivered over the air. Verify each firmware component against the spec's frame definitions and LED/behaviour tables and complete the unverified or missing pieces (ring timeout fallthrough, one-way announcement, mute-switch daemon interaction).",
+        "spec_sections": [
+          "16-voice-device.md (entire file — firmware responsibilities, control/audio frames, LED ring states, mute, buttons, ring timeout, one-way announce, OTA, provisioning)",
+          "18-tech-stack.md (firmware toolchain: ESP-IDF, microWakeWord, esp_websocket_client, esp_codec_dev, OTA)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B11",
+    "name": "Offline, reconnect, and replay across surfaces",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1", "B2", "B3"],
+    "tasks": [
+      {
+        "task": "Surfaces are dumb clients that must degrade gracefully when the connection drops without losing the user's work or silently swallowing it. When a surface's WebSocket disconnects it shows a reconnecting indicator, disables sending, and reconnects with exponential backoff that resets on success; on reconnect it re-says hello and requests replay from the last sequence it saw for each open chat so missed events stream back in order. The gap to close is inbound queueing: input the user composes while disconnected must be queued in memory and emitted on reconnect, and if the surface is killed before reconnect the user gets a clear not-sent indicator on those messages — today sending while offline simply fails. When the daemon (rather than the server) is offline, each affected chat shows a daemon-offline banner and messages queue server-side. Decode errors and failed sends surface visibly as errors, never as silent drops. Presence collapses correctly when surfaces background (heartbeat pauses) and on disconnect. Verify the reconnect/replay path (largely built) and implement the offline input queue and not-sent indicator on both web and mobile.",
+        "spec_sections": [
+          "12-error-and-offline.md (entire file — disconnect handling, offline input queue, not-sent indicator, replay, daemon-offline, presence collapse)",
+          "05-surfaces.md (dumb clients, presence, heartbeat)",
+          "principles.md ## No fallbacks (failures must be visible)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B12",
+    "name": "Desktop notifier surface",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B2", "B6"],
+    "tasks": [
+      {
+        "task": "The desktop surface is the OS-native notifier and menu-bar presence for the system. It must register with the server as a desktop-kind surface so that desktop-channel notifications actually reach it — today the desktop app connects as a web surface, so desktop-routed notifications find no recipient; this is the core defect to fix. On a desktop-channel notification it shows a native OS notification whose click opens the app to the relevant chat. The menu-bar/tray popover lists Manager plus recent chats and offers a quick text input to Manager and a global voice hotkey to Manager. Presence must be emitted honestly: the surface heartbeats while its window or popover is actually in focus and stops when the popover is merely closed-to-tray (tray chrome is not focus) and when backgrounded, so notification suppression behaves correctly. The desktop app is macOS-only at v1, shipped unsigned for self-hosters. Verify the notification and menu-bar behaviours and fix the surface-kind registration and the popover/hotkey presence emission.",
+        "spec_sections": [
+          "05-surfaces.md (desktop notifier surface, menu-bar, presence/heartbeat rules)",
+          "09-notifications.md (desktop channel routing)",
+          "14-design-web.md (menu-bar surface / menubar route)",
+          "18-tech-stack.md (Electron desktop shell, macOS-only, unsigned)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B13",
+    "name": "CLI and terminal surface",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1", "B2", "B3", "B5"],
+    "tasks": [
+      {
+        "task": "The patch CLI is a thin wrapper over Claude Code plus the agent-facing primitives, talking to the local daemon over its socket when present and to the server over REST otherwise, with no fallback between them on error. It provides the documented subcommands for chats, jobs, hooks, threads, surfaces, logs, auth (login via QR pairing and first-run bootstrap), daemon control, doctor, and health, each with a JSON output mode and clear human output, and surfaces errors as actionable messages with non-zero exit. The no-fallback rule must be honoured at the credential layer specifically: missing or invalid credentials must fail loudly and exit, not be caught-and-continued — both the log-streaming command and the interactive TUI currently swallow a missing credential and proceed with no auth, which must be corrected. The interactive terminal, when launched with no target, presents a folder picker (recent folders on the box plus a path entry) rather than silently using a default, and Claude Code flags (model, skip-permissions, resume, etc.) pass through to the spawned/resumed session. Credential expiry and corruption are detected and reported. Cover the unhappy paths for every command (missing args, unknown ids, server unreachable, transport error). Finally, ship the agent-facing CLI skill file documenting the commands and their JSON output so agents can drive the CLI. Verify the built command surface and close the credential-fallback, flag-passthrough, folder-picker, and skill-doc gaps.",
+        "spec_sections": [
+          "17-cli.md (entire file — subcommands, agent-facing primitives, JSON output, doctor, SKILL schema)",
+          "13-design-terminal.md (entire file — TUI UX, folder picker, flag pass-through, status strip)",
+          "10-auth.md (bootstrap and login flows)",
+          "principles.md ## No fallbacks (credentials must fail loudly)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B14",
+    "name": "Web app",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1", "B2", "B3", "B6", "B8", "B11"],
+    "tasks": [
+      {
+        "task": "The web SPA is the full-featured surface: a three-column layout (sidebar, main chat, editor rail) whose dividers are user-resizable. The sidebar shows Manager at the top, then pinned chats, then folder-grouped chats ranked by status badge, a collapsible Channels box (Telegram and Speakers, passive — no mic), and a collapsible Archived section; each chat row shows name, one-line preview, a relative timestamp, and a status badge with the correct animated states, with hover-revealed row tools (mic, pin). The Archived section offers natural-language search over old chats. The main panel renders the message stream with markdown, role colouring, tool calls collapsed-by-default and expandable, inline diffs opening in the editor rail, inline permission prompts with keyboard shortcuts, and a per-message context menu (retry/copy/inspect-raw); the chat header shows folder path, generated name, a waiting-on-you pill, and a kebab menu that is hidden for the special threads. The composer is multiline, sends on the documented shortcut, inserts a newline on shift-enter, and is disabled while offline and read-only for the voice/telegram-only threads. The editor rail does diff and browse modes and is read-only while the chat is running. Implement the full documented keyboard-shortcut set including the currently-missing ones (jump-folder, jump-oldest-unread, global search, newline). Voice entry points (call overlay, voice-note overlay, incoming-call banner, row/composer mic) and offline/daemon banners with reconnect-replay are present — verify them. New-chat opens directly in the main panel (no modal); schedules list/editor and settings (account, integrations, telegram pairing, push registration, logout) are present. Cold start shows the pairing QR when unauthenticated and hydrates over REST before the event stream. Close the missing/partial items (resizable dividers, archived search, relative time, markdown, tool collapse, context menu, special-thread kebab hiding, missing shortcuts, menubar send) and verify the rest against this behaviour.",
+        "spec_sections": [
+          "14-design-web.md (entire file — layout, sidebar, main panel, editor rail, routes, shortcuts, voice UI, offline)",
+          "05-surfaces.md (web surface, presence, editor concurrency)",
+          "07-voice-app.md (web voice overlays and entry points)",
+          "12-error-and-offline.md (offline banners, reconnect, not-sent)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B15",
+    "name": "Mobile app",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1", "B2", "B3", "B6", "B8", "B11"],
+    "tasks": [
+      {
+        "task": "The mobile app is Android-native (Expo; iOS out of scope) with three tabs — Chats, Voice (a raised one-handed button that opens Manager and long-presses to a voice note), and Settings. The Chats tab mirrors the web sidebar's structure (Manager pinned, pinned chats, folders, collapsible Channels and Archived sections with natural-language archived search) with status badges, name/preview/time per row, a long-press context sheet, and a swipe-left reveal of mic and archive actions — the swipe gesture is currently broken because the gesture library isn't wired, which must be fixed. Chat detail renders the full stream with role styling, permission prompts with options, tool calls collapsed-and-expandable, and diffs in a mobile-friendly unified format (currently missing). The composer supports multiline text plus a mic that taps-to-call and holds-to-note, and is disabled when disconnected and read-only for the voice/telegram-only threads. Voice-note and voice-call overlays and native incoming-call handling via the system call service are present — verify them, including the foreground-service/audio-focus lifecycle and the decline/timeout fall-through. Push notifications register with FCM and re-register on rotation; tapping a message notification must deep-link into the chat (currently only call notifications route). Settings must be completed: account details, linked-devices with revoke, daemon status, the integration connections (Telegram, Calendar, Todoist), a read-mostly secrets store, a schedules sub-screen with a real editor (not just enable/disable), and the voice/speaker preference. Production device cryptography for pairing and the voice-note upload path must be wired (currently dev placeholders). Cold start pairs via QR and hydrates over REST. Close the listed missing/broken/partial items and verify the rest.",
+        "spec_sections": [
+          "15-design-mobile.md (entire file — tabs, chat list, chat detail, composer, voice, settings, push, native specifics)",
+          "05-surfaces.md (mobile surface, presence)",
+          "07-voice-app.md (mobile voice note/call, ConnectionService)",
+          "09-notifications.md (mobile push, in-app vs push, call ringing)",
+          "12-error-and-offline.md (mobile offline banners, queueing)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "B16",
+    "name": "Deployment and tech-stack conformance",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B2", "B3", "B6", "B8"],
+    "tasks": [
+      {
+        "task": "Patch runs as one server, one daemon, and a reverse proxy on a single Hetzner box via Docker Compose, with the web SPA built into the server image and auto-TLS at the proxy. Verify the whole deployment contract end-to-end: the compose services and their health-check dependency ordering, the reverse-proxy routing and certificate persistence, the complete environment-variable contract (server URL, JWT secret, timezone with cron evaluated in UTC, the external-integration tokens/secrets, the push service account, and the voice-stack selection and model paths), and the storage layout of flat files under the data directory and the daemon's chat/thread directories. Confirm the build tooling (workspace, task runner, strict TypeScript, lint/format) and that every package pulls the libraries the tech-stack spec mandates. Confirm the deploy flow (build, push to registry, pull and start on the box, health-verify) works and nightly backups of the data directory are configured. Resolve the open technical decisions the spec flags as TBD (the mobile call-service coverage and the Android end-to-end test framework choice) and confirm the optional-but-required runtime pieces are actually present on the box: the Claude Code SDK and the speech sidecars (transcription and synthesis) must be installed and fail loudly if absent. This is largely a verification pass — confirm conformance and close any infrastructure gaps.",
+        "spec_sections": [
+          "11-deployment.md (entire file — Docker Compose, Hetzner topology, reverse proxy, env vars, backups)",
+          "18-tech-stack.md (entire file — languages, frameworks, libraries, build tools, storage, testing, open TBDs)",
+          "00-overview.md ## Component map"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "C1",
+    "name": "Testing B1 (wire protocol)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C2",
+    "name": "Testing B2 (server core)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C3",
+    "name": "Testing B3 (daemon lifecycle)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B3"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C4",
+    "name": "Testing B4 (permission gating)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B4"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C5",
+    "name": "Testing B5 (jobs and triggers)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B5"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C6",
+    "name": "Testing B6 (notifications)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B6"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C7",
+    "name": "Testing B7 (special threads)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B7"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C8",
+    "name": "Testing B8 (voice daemon)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B8"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C9",
+    "name": "Testing B9 (voice device routing)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B9"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C10",
+    "name": "Testing B10 (firmware)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B10"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C11",
+    "name": "Testing B11 (offline/replay)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B11"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C12",
+    "name": "Testing B12 (desktop notifier)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B12"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C13",
+    "name": "Testing B13 (CLI)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B13"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C14",
+    "name": "Testing B14 (web app)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B14"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C15",
+    "name": "Testing B15 (mobile app)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B15"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C16",
+    "name": "Testing B16 (deployment)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B16"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C-FINAL",
+    "name": "Final full-system review",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5",
+      "B6",
+      "B7",
+      "B8",
+      "B9",
+      "B10",
+      "B11",
+      "B12",
+      "B13",
+      "B14",
+      "B15",
+      "B16"
+    ],
+    "tasks": [
+      "accessibility-reviewer",
+      "performance-reviewer",
+      "security-reviewer",
+      "spec-reviewer",
+      "general-reviewer"
+    ]
+  }
+]

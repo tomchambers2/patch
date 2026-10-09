@@ -1,0 +1,3 @@
+# Keep this dir tracked so it exists (owned by the deploy user) before Docker
+# bind-mounts it — otherwise Docker creates it as root and rsync/publish fails.
+# Published APKs land here (git-ignored); served at /api/download/patch.apk.

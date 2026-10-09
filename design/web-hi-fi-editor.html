@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · editor (hi-fi v01)</title>
+<link rel="stylesheet" href="hi-fi-tokens.css">
+<style>
+  body { padding: 28px 0; }
+  .stage-label {
+    width: 1280px; margin: 0 auto 8px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-3);
+  }
+  .stage-label .num { background: var(--ink); color: var(--bg-app); padding: 2px 8px; margin-right: 8px; }
+  .stage-label .desc { text-transform: none; letter-spacing: 0; font-family: 'Inter', sans-serif; color: var(--ink-2); font-size: 13px; }
+
+  .stage {
+    width: 1280px;
+    height: 760px;
+    margin: 0 auto 32px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-rows: 56px 1fr 36px;
+    grid-template-columns: 280px 1fr;
+    overflow: hidden;
+  }
+  .head {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--line-soft);
+    padding: 0 22px;
+    display: flex; align-items: center; gap: 14px;
+    background: var(--bg-panel);
+  }
+  .head .crumb { color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; }
+  .head .file { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; font-weight: 500; color: var(--ink); }
+  .head .badge {
+    font-size: 11px; padding: 2px 9px; border-radius: var(--radius-pill);
+    background: var(--accent-tint); color: var(--accent-strong); font-weight: 500;
+    border: 1px solid var(--accent-soft);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  .head .right { margin-left: auto; display: flex; gap: 8px; }
+  .ctrl {
+    font-size: 12.5px; border: 1px solid var(--line);
+    padding: 6px 12px; background: var(--bg-elevated); color: var(--ink-2);
+    border-radius: var(--radius); font-family: inherit; font-weight: 500;
+  }
+  .ctrl.primary { background: var(--accent); color: var(--bg-elevated); border-color: var(--accent); }
+
+  .tree { background: var(--bg-panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+  .tree-search { padding: 12px 14px; border-bottom: 1px solid var(--line-soft); }
+  .tree-search input {
+    width: 100%; border: 1px solid var(--line);
+    padding: 7px 10px;
+    background: var(--bg-elevated);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    border-radius: var(--radius);
+    color: var(--ink);
+  }
+  .tree-list { flex: 1; padding: 8px 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; overflow: hidden; }
+  .t-row { padding: 4px 8px; display: flex; align-items: baseline; gap: 8px; margin: 0 8px; border-radius: var(--radius-sm); }
+  .t-row:hover { background: var(--bg-soft); }
+  .t-row.active { background: var(--accent-tint); }
+  .t-row .caret { width: 12px; color: var(--ink-3); }
+  .t-row .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t-row.folder .name { font-weight: 500; }
+  .t-row.dirty::after { content: '●'; color: var(--accent); font-size: 10px; }
+  .t-row.depth-1 { padding-left: 8px; }
+  .t-row.depth-2 { padding-left: 22px; }
+  .t-row.depth-3 { padding-left: 36px; }
+
+  .content { background: var(--bg-elevated); display: flex; flex-direction: column; overflow: hidden; }
+  .content-meta {
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-panel);
+    padding: 8px 22px;
+    font-size: 11.5px;
+    color: var(--ink-3);
+    display: flex; gap: 14px; align-items: center;
+  }
+  .content-meta b { color: var(--ink); }
+  .content-meta .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .toggle-grp { display: flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--bg-elevated); }
+  .toggle-grp .opt { padding: 4px 12px; font-size: 11.5px; color: var(--ink-3); border-right: 1px solid var(--line); cursor: default; font-weight: 500; }
+  .toggle-grp .opt:last-child { border-right: none; }
+  .toggle-grp .opt.active { background: var(--accent-tint); color: var(--accent-strong); }
+
+  .body-text {
+    flex: 1; padding: 12px 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 13px; line-height: 1.65;
+    overflow: hidden; white-space: pre;
+  }
+  .body-text .line { display: block; padding: 0 22px 0 0; }
+  .body-text .ln {
+    display: inline-block; width: 64px;
+    color: var(--ink-faint); user-select: none;
+    text-align: right; padding-right: 12px;
+  }
+  .body-text .add { background: var(--diff-add); }
+  .body-text .del { background: var(--diff-del); }
+
+  .foot {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-panel);
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 22px;
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .foot .right { margin-left: auto; display: flex; gap: 14px; }
+  .foot b { color: var(--ink); }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; background: var(--bg-soft); padding: 1px 5px; border-radius: 3px; color: var(--ink); }
+</style>
+</head>
+<body>
+
+
+<div class="stage-label"><span class="num">1</span><span class="desc">editor — diff mode (file with pending edits)</span></div>
+<div class="stage">
+  <div class="head">
+    <span class="crumb">~/projects/bed-planner /</span>
+    <span class="file">src/layout.ts</span>
+    <span class="badge">+3 / −1</span>
+    <span class="right">
+      <span class="ctrl primary">Save</span>
+      <span class="ctrl">⤢ collapse</span>
+      <span class="ctrl">×</span>
+    </span>
+  </div>
+  <div class="tree">
+    <div class="tree-search"><input type="text" placeholder="⌘P  go to file…"></div>
+    <div class="tree-list">
+      <div class="t-row folder depth-1"><span class="caret">▾</span><span class="name">src</span></div>
+      <div class="t-row folder depth-2"><span class="caret">▸</span><span class="name">components</span></div>
+      <div class="t-row dirty depth-2 active"><span class="caret"></span><span class="name">layout.ts</span></div>
+      <div class="t-row depth-2"><span class="caret"></span><span class="name">main.ts</span></div>
+      <div class="t-row folder depth-1"><span class="caret">▾</span><span class="name">test</span></div>
+      <div class="t-row dirty depth-2"><span class="caret"></span><span class="name">layout.test.ts</span></div>
+      <div class="t-row depth-1"><span class="caret"></span><span class="name">package.json</span></div>
+      <div class="t-row depth-1"><span class="caret"></span><span class="name">README.md</span></div>
+      <div class="t-row depth-1"><span class="caret"></span><span class="name">tsconfig.json</span></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="content-meta">
+      <span><b>src/layout.ts</b> · TypeScript · 142 lines</span>
+      <span class="right">
+        <span>view</span>
+        <span class="toggle-grp">
+          <span class="opt active">diff</span>
+          <span class="opt">new</span>
+          <span class="opt">old</span>
+        </span>
+      </span>
+    </div>
+    <div class="body-text"><span class="line"><span class="ln">1   1</span>  export const layout = {</span><span class="line"><span class="ln">2   2</span>    rows: 2,</span><span class="line del"><span class="ln">3    </span>−   grid: '400px 1fr',</span><span class="line add"><span class="ln">    3</span>+   grid: 'minmax(280px, 1fr) 1fr',</span><span class="line"><span class="ln">4   4</span>  }</span><span class="line"><span class="ln">5   5</span></span><span class="line"><span class="ln">6   6</span>  // the old layout used a fixed</span><span class="line"><span class="ln">7   7</span>  // 400px right column, which broke</span><span class="line"><span class="ln">8   8</span>  // at narrow viewports because the</span><span class="line"><span class="ln">9   9</span>  // editor would overlap.</span></div>
+  </div>
+  <div class="foot">
+    <span><b>src/layout.ts</b> · TypeScript · 142 lines</span>
+    <span>UTF-8 · LF</span>
+    <span><b>2</b> dirty files in this chat</span>
+    <span class="right"><span><code>⌘S</code> save · <code>⌘P</code> go to file · <code>esc</code> collapse</span></span>
+  </div>
+</div>
+
+
+<div class="stage-label"><span class="num">2</span><span class="desc">editor — plain mode (clean file, no changes)</span></div>
+<div class="stage">
+  <div class="head">
+    <span class="crumb">~/projects/bed-planner /</span>
+    <span class="file">README.md</span>
+    <span class="right">
+      <span class="ctrl primary">Save</span>
+      <span class="ctrl">⤢ collapse</span>
+      <span class="ctrl">×</span>
+    </span>
+  </div>
+  <div class="tree">
+    <div class="tree-search"><input type="text" placeholder="⌘P  go to file…"></div>
+    <div class="tree-list">
+      <div class="t-row folder depth-1"><span class="caret">▾</span><span class="name">src</span></div>
+      <div class="t-row folder depth-2"><span class="caret">▸</span><span class="name">components</span></div>
+      <div class="t-row dirty depth-2"><span class="caret"></span><span class="name">layout.ts</span></div>
+      <div class="t-row depth-2"><span class="caret"></span><span class="name">main.ts</span></div>
+      <div class="t-row folder depth-1"><span class="caret">▾</span><span class="name">test</span></div>
+      <div class="t-row dirty depth-2"><span class="caret"></span><span class="name">layout.test.ts</span></div>
+      <div class="t-row depth-1"><span class="caret"></span><span class="name">package.json</span></div>
+      <div class="t-row active depth-1"><span class="caret"></span><span class="name">README.md</span></div>
+      <div class="t-row depth-1"><span class="caret"></span><span class="name">tsconfig.json</span></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="content-meta">
+      <span><b>README.md</b> · Markdown · 23 lines</span>
+      <span class="right" style="color: var(--ink-3);">no changes — viewing current file</span>
+    </div>
+    <div class="body-text" style="white-space: pre-wrap;"><span class="line"><span class="ln">1</span># bed-planner</span><span class="line"><span class="ln">2</span></span><span class="line"><span class="ln">3</span>A small app for planning meals around bed times.</span><span class="line"><span class="ln">4</span></span><span class="line"><span class="ln">5</span>## getting started</span><span class="line"><span class="ln">6</span></span><span class="line"><span class="ln">7</span>```bash</span><span class="line"><span class="ln">8</span>npm install</span><span class="line"><span class="ln">9</span>npm run dev</span><span class="line"><span class="ln">10</span>```</span></div>
+  </div>
+  <div class="foot">
+    <span><b>README.md</b> · Markdown · 23 lines</span>
+    <span>UTF-8 · LF</span>
+    <span class="right"><span><code>⌘S</code> save · <code>⌘P</code> go to file · <code>esc</code> collapse</span></span>
+  </div>
+</div>
+
+</body>
+</html>

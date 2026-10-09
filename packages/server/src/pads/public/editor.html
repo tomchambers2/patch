@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pad</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<header class="bar">
+  <span class="brand"><span id="name"></span></span>
+  <div class="modes" role="tablist">
+    <button data-mode="view" title="View (E toggles)">View</button>
+    <button data-mode="edit" title="Edit (E toggles)">Edit</button>
+  </div>
+  <div class="tools" id="editTools" role="toolbar">
+    <button data-tool="select" title="Select (V)"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6.5 1.5L9 19z"/></svg><span>Select</span></button>
+    <button data-tool="text" title="Note (N)"><svg viewBox="0 0 24 24"><path d="M5 5h14M12 5v14"/></svg><span>Note</span></button>
+    <button data-tool="draw" title="Draw (D)"><svg viewBox="0 0 24 24"><path d="M4 20c3-1 4-4 7-7l6-6a2 2 0 013 3l-6 6c-3 3-6 4-7 7z"/></svg><span>Draw</span></button>
+  </div>
+  <div class="device" id="device">
+    <button data-device="desktop">Desktop</button>
+    <button data-device="phone">Phone</button>
+  </div>
+  <button class="changes-btn" id="panelBtn" aria-label="Changes"><span class="lbl">Changes</span> <b id="count">0</b></button>
+</header>
+<div class="screenbar" id="screenBar" hidden>
+  <button id="prevScreen" aria-label="Previous screen">‹</button>
+  <button id="screenName" class="name"></button>
+  <button id="nextScreen" aria-label="Next screen">›</button>
+  <button id="addScreenBar" aria-label="Add screen">+</button>
+</div>
+<main class="work">
+  <nav class="screens" id="screens" hidden aria-label="Screens"></nav>
+  <div class="stage" id="stage">
+    <div class="wrap" id="wrap">
+      <iframe id="frame" title="Design"></iframe>
+      <div class="layer" id="layer"></div>
+    </div>
+  </div>
+  <aside class="panel" id="panel">
+    <div class="panel-head"><h2>Changes</h2><button class="close" id="panelClose" aria-label="Close">✕</button></div>
+    <ol class="pending" id="pending"></ol>
+    <p class="err" id="sendErr" hidden></p>
+    <button class="send" id="send" disabled>Send</button>
+    <h3 class="hist-title" id="histTitle" hidden>Sent</h3>
+    <ol class="history" id="history"></ol>
+  </aside>
+</main>
+<div class="help" id="help" hidden role="dialog" aria-label="Shortcuts">
+  <div class="help-card">
+    <h2>Shortcuts</h2>
+    <dl>
+      <dt>E</dt><dd>View / Edit</dd>
+      <dt>V · N · D</dt><dd>Select · Note · Draw</dd>
+      <dt>⌘D</dt><dd>Duplicate</dd>
+      <dt>Delete</dt><dd>Delete</dd>
+      <dt>← ↑ → ↓</dt><dd>Nudge 1px, with Shift 10px</dd>
+      <dt>Enter</dt><dd>Edit text</dd>
+      <dt>Shift Enter</dt><dd>Select parent</dd>
+      <dt>Tab · Shift Tab</dt><dd>Next · previous element</dd>
+      <dt>Esc</dt><dd>Deselect</dd>
+      <dt>⌘Z · ⇧⌘Z</dt><dd>Undo · redo</dd>
+      <dt>Page Up · Down</dt><dd>Previous · next screen</dd>
+      <dt>⌘Enter</dt><dd>Send</dd>
+      <dt>?</dt><dd>This list</dd>
+    </dl>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="editor.js"></script>
+</body>
+</html>

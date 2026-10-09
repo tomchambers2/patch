@@ -1,0 +1,745 @@
+[
+  {
+    "title": "The connect greeting carries every registered machine with its presence and the server's cached reports",
+    "spec_sections": [
+      "03-wire-protocol.md ### Control (anywhere ↔ server)",
+      "12-error-and-offline.md ### Host-offline UX",
+      "01-server.md ## Responsibilities"
+    ],
+    "outcome": "A surface authenticating over /ws receives auth.ok whose hosts[] holds one entry per registered machine — daemonId, online, lastSeenAt, the server's cached daemon.host self-description and its cached per-backend daemon.account reports — so the whole Hosts list renders from the greeting alone, including a machine that is asleep and will never announce itself.",
+    "evidence": "Raw auth.ok JSON captured by a real WS client holding a minted surface credential against the live server, with the rig's host-a daemon linked; alongside the daemon.host and daemon.account frames the daemon emitted on link, showing the greeting replays the same content."
+  },
+  {
+    "title": "The connect greeting carries the web-bundle hash alongside the host roster",
+    "spec_sections": [
+      "03-wire-protocol.md ### Control (anywhere ↔ server)",
+      "14-design-web.md ## Live updates"
+    ],
+    "outcome": "auth.ok carries webBundleHash — the content hash of the web bundle the server serves — as a sibling of hosts[], so host-addressing the greeting did not displace the field it already carried.",
+    "evidence": "The same captured auth.ok frame, with webBundleHash compared against the hash of the bundle the live server actually serves at /app/."
+  },
+  {
+    "title": "The greeting says what the server knows about a machine it has never heard from, and invents nothing",
+    "spec_sections": [
+      "03-wire-protocol.md ### Control (anywhere ↔ server)",
+      "10-auth.md ## Daemon registration (adding a host)"
+    ],
+    "outcome": "A machine that is registered but has never connected appears in auth.ok's hosts[] with online false and host null and no accounts, rather than with a fabricated self-description or with the attached host's description attributed to it.",
+    "evidence": "Registration of a second daemon key on the live server without ever starting that daemon, then the captured auth.ok showing that entry's host field as null while the linked host's entry carries a full report."
+  },
+  {
+    "title": "A client's source commit and build instant travel in the greeting and reach the version report",
+    "spec_sections": [
+      "03-wire-protocol.md ### Control (anywhere ↔ server)",
+      "11-deployment.md ## Version reporting"
+    ],
+    "outcome": "hello accepts optional clientGitSha and clientBuiltAt, the server records them against that connection, and GET /api/version reports what that device is actually running; a client that sends neither is recorded as unknown rather than assumed current.",
+    "evidence": "Two live WS connects — one sending both fields, one sending neither — and the authenticated GET /api/version response for each, showing the recorded sha/builtAt and the null case."
+  },
+  {
+    "title": "A spawn naming no machine is refused naming the field, and no chat is created",
+    "spec_sections": [
+      "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+      "04-chats-and-folders.md ## Spawn",
+      "01-server.md ## Endpoints"
+    ],
+    "outcome": "POST /api/chats without daemonId, and a chat.spawn_request frame without daemonId, are both rejected — the HTTP call with a 400 naming the missing field, the frame by strict decode — and the daemon spawns nothing.",
+    "evidence": "curl of the authenticated POST /api/chats with no daemonId showing the 400 and the field name; the WS client's rejected chat.spawn_request; and the daemon's own chat list before and after, unchanged."
+  },
+  {
+    "title": "A spawn naming a machine that is not registered is refused naming the value, never routed to whichever machine is attached",
+    "spec_sections": [
+      "04-chats-and-folders.md ## Spawn",
+      "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+      "01-server.md ## Responsibilities"
+    ],
+    "outcome": "A spawn carrying an unknown daemonId is rejected with that value named, and the linked host — the only daemon attached — never receives the request.",
+    "evidence": "curl POST /api/chats with daemonId=not-a-host showing the rejection text carrying the value, plus the host-a daemon log over the same window showing no spawn arrived."
+  },
+  {
+    "title": "The spawned-chat event carries the machine the chat is pinned to",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "04-chats-and-folders.md ## Chat model"
+    ],
+    "outcome": "A spawn naming the rig's host-a produces a chat.spawned carrying daemonId=host-a alongside chatId and folder.",
+    "evidence": "The chat.spawned frame as received by a live WS surface after a real spawn into a folder that exists on host-a."
+  },
+  {
+    "title": "A chat's machine is fixed for its lifetime",
+    "spec_sections": ["04-chats-and-folders.md ## Chat model", "01-server.md ## Responsibilities"],
+    "outcome": "After a chat is spawned, every later view of it — the chat roster from GET /api/chats, its state events, its replay — reports the same daemonId it was spawned on, and there is no path that reassigns it.",
+    "evidence": "The chat.spawned daemonId, the GET /api/chats metadata entry for that chat, and a chat.state for it after a turn, all showing the same host id; captured after a daemon restart as well as before."
+  },
+  {
+    "title": "A spawn that names no model is accepted and the chat takes its machine's last-used model",
+    "spec_sections": [
+      "04-chats-and-folders.md ## Spawn",
+      "02-daemon.md ## Agent backends",
+      "03-wire-protocol.md ### Surface events (surface → server → daemon)"
+    ],
+    "outcome": "Model is optional at the spawn site: a spawn carrying only a machine and a folder succeeds, and the chat runs on that machine's last-used model rather than the protocol obliging the caller to supply one.",
+    "evidence": "A real spawn on host-a with no model field, its chat.spawned and first turn, and the daemon's record of the model that turn actually ran on, matched against the host's reported lastUsedModel."
+  },
+  {
+    "title": "The cross-chat spawn call names the machine the new chat is created on, and its model is optional",
+    "spec_sections": [
+      "03-wire-protocol.md ### Cross-chat tools",
+      "04-chats-and-folders.md ## Spawn"
+    ],
+    "outcome": "patch.spawn carries daemonId naming the machine the new chat is created on, and omitting model is valid; a call naming an offline machine returns an error to the calling agent naming that machine, within the turn.",
+    "evidence": "An agent turn on host-a calling patch_spawn with no model, the resulting patch.spawn frame seen by a surface and the chat.spawned it produced; plus a second call naming a machine with no live link, showing the in-turn error naming it."
+  },
+  {
+    "title": "Host presence online names the machine it describes",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "12-error-and-offline.md ### Surface connection state model"
+    ],
+    "outcome": "When a machine's daemon link comes up, the server emits daemon.online carrying that machine's daemonId, so a surface attributes the presence to the right machine rather than to the account.",
+    "evidence": "A live WS surface's captured daemon.online frame taken while starting the rig's host-a daemon under launchd."
+  },
+  {
+    "title": "Host presence offline names the machine it describes",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "12-error-and-offline.md ### Hosts fail independently"
+    ],
+    "outcome": "On that machine's link drop or heartbeat timeout the server emits daemon.offline carrying its daemonId, and the surface's presence for other machines is untouched.",
+    "evidence": "The captured daemon.offline frame taken while stopping the host-a daemon service, with the surface's per-host presence map before and after."
+  },
+  {
+    "title": "The unauthenticated report names both the machine and the backend whose credential is missing",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "10-auth.md ## Backend credentials",
+      "02-daemon.md ## Agent backends"
+    ],
+    "outcome": "A machine whose agent backend has no usable credential emits daemon.unauthenticated carrying daemonId and backendId together with a reason, so a surface can render 'not connected' on that backend's row under that machine.",
+    "evidence": "The frame captured from the rig's host-logged-out fixture (claude present, no credential) linked to the live server, showing both ids and the reason text."
+  },
+  {
+    "title": "A machine's self-description carries the complete field set",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "02-daemon.md ## Host identity",
+      "02-daemon.md ## Agent backends",
+      "02-daemon.md ## Optional components (large models)"
+    ],
+    "outcome": "daemon.host carries daemonId, hostName, platform, arch, daemonVersion, updateAvailable, permissionModeDefault, the count of that machine's chats carrying a per-chat override, lastUsedModel (absent until it has one), isHomeHost, backends[] of {id,label,version,state} and components[] of {id,label,bytes,state,progress?,error?}.",
+    "evidence": "The raw daemon.host frame emitted by host-a on link, field by field, with the machine's real platform/arch/version cross-checked on that host."
+  },
+  {
+    "title": "A machine re-describes itself whenever a field it reports changes",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "02-daemon.md ## Host identity"
+    ],
+    "outcome": "daemon.host is emitted on connect and again whenever any field changes, so a surface never renders a stale backend list, override count or model; the server's cached copy updates with it.",
+    "evidence": "Two daemon.host frames from one host-a session either side of a change to a reported field (a chat spawned, changing the chat/override counts and lastUsedModel), plus the auth.ok of a surface connecting afterwards showing the newer cached copy."
+  },
+  {
+    "title": "The credential report is per machine and per backend",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "10-auth.md ## Backend credentials"
+    ],
+    "outcome": "daemon.account carries {daemonId, backendId, connected, accountEmail?} — one report per backend per machine — emitted on connect and on every connect/disconnect, and the server caches it keyed by that pair and replays it in the greeting.",
+    "evidence": "The daemon.account frames from host-a and from host-logged-out linked in turn, and the auth.ok accounts[] for each, showing the reports keyed by (machine, backend) rather than by account."
+  },
+  {
+    "title": "The retired account-wide credential frames are gone from the contract",
+    "spec_sections": ["03-wire-protocol.md ### Host events", "10-auth.md ## Backend credentials"],
+    "outcome": "The account-wide connect/disconnect and account-report frames the per-machine pair replaced are no longer decodable: a surface sending one is refused as a malformed frame rather than having it silently accepted or routed to whichever machine is attached.",
+    "evidence": "A live WS client sending the retired frame shapes, showing the server's close with its bad-frame reason and the server log naming the rejected type, and the daemon log showing nothing arrived."
+  },
+  {
+    "title": "The folder-registry snapshot names the machine whose filesystem it describes",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "04-chats-and-folders.md ## Folders (daemon-owned registry)"
+    ],
+    "outcome": "folders.list, sent on connect, carries daemonId alongside roots[] and recent[], so a surface files each list under the machine it belongs to.",
+    "evidence": "The folders.list frame captured from a live surface session with host-a linked, showing the daemonId and the real roots on that machine."
+  },
+  {
+    "title": "The folder-registry change push names the machine whose registry changed",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "04-chats-and-folders.md ## Folders (daemon-owned registry)"
+    ],
+    "outcome": "folders.updated carries daemonId and is pushed whenever that machine's registry changes, including after an add or a remove.",
+    "evidence": "The folders.updated frame captured at a live surface after changing host-a's registry on that machine, with its daemonId and the changed list."
+  },
+  {
+    "title": "The folder listing is grouped by machine, so two machines sharing a path string stay two entries",
+    "spec_sections": [
+      "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+      "01-server.md ## Endpoints"
+    ],
+    "outcome": "GET /api/folders returns the registry grouped per host rather than as a flat union, so the same absolute path present on two machines renders as two distinct pickable entries.",
+    "evidence": "The authenticated GET /api/folders response with the host-a group populated, and a second registered host's group present and separate, with an identical path string appearing under both."
+  },
+  {
+    "title": "A directory-browse request without a machine is refused rather than guessed",
+    "spec_sections": [
+      "04-chats-and-folders.md ### Browsing (directory listing)",
+      "03-wire-protocol.md ### Host events"
+    ],
+    "outcome": "GET /api/folders/browse with no daemonId is a 400 saying the machine is required; browsing is addressed to one machine at a time and the server does not pick one.",
+    "evidence": "curl of the authenticated browse endpoint with no daemonId, showing the 400 and its message."
+  },
+  {
+    "title": "A directory-browse response echoes the machine it was addressed to",
+    "spec_sections": [
+      "04-chats-and-folders.md ### Browsing (directory listing)",
+      "03-wire-protocol.md ### Host events"
+    ],
+    "outcome": "A browse naming host-a returns that machine's child directories only (name + absolute path, no files) and echoes daemonId, so a surface cannot mis-attribute a listing to another machine.",
+    "evidence": "The browse response for a real directory on host-a, showing the echoed daemonId and entries matching that machine's actual filesystem, with no file entries."
+  },
+  {
+    "title": "A browse escaping that machine's designated roots is refused",
+    "spec_sections": ["04-chats-and-folders.md ### Browsing (directory listing)"],
+    "outcome": "A browse whose dir traverses outside the machine's designated project roots is answered folder_not_found rather than a listing of / or the home directory.",
+    "evidence": "Browse calls against host-a using .. traversal out of a registered root and against an absolute path outside every root, both showing the refusal."
+  },
+  {
+    "title": "A folder-registry add reaches the machine it names and is answered with the updated list",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "04-chats-and-folders.md ## Folders (daemon-owned registry)"
+    ],
+    "outcome": "host.folder_add carrying daemonId and an absolute path is delivered to that machine, which validates the path against its own filesystem, writes its registry and answers folders.updated — so the list every surface shows is the one the daemon actually holds.",
+    "evidence": "A live surface sending host.folder_add for a real directory on host-a, the folders.updated it receives back, and the registry file on that machine showing the new root."
+  },
+  {
+    "title": "A folder-registry edit carrying an empty path is refused by validation",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "04-chats-and-folders.md ## Folders (daemon-owned registry)"
+    ],
+    "outcome": "host.folder_add with path \"\" is rejected at the boundary naming the offending field, and nothing is written on any machine.",
+    "evidence": "The live WS client's frame and the server's refusal, plus host-a's registry file unchanged over the same window."
+  },
+  {
+    "title": "A folder-registry add naming a path that does not exist on that machine is refused naming it",
+    "spec_sections": ["04-chats-and-folders.md ## Folders (daemon-owned registry)"],
+    "outcome": "An add whose path does not exist on the named machine is refused with the path named, rather than being registered optimistically and failing later at spawn.",
+    "evidence": "host.folder_add for a path that exists on this Mac but not inside host-a's sandboxed HOME, showing the refusal carrying the path and the registry unchanged."
+  },
+  {
+    "title": "A folder-registry remove drops the root on the machine it names",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "04-chats-and-folders.md ## Folders (daemon-owned registry)"
+    ],
+    "outcome": "host.folder_remove carrying daemonId and path drops that designated root on that machine and pushes folders.updated reflecting the removal.",
+    "evidence": "The remove frame, the folders.updated received, and host-a's registry file before and after."
+  },
+  {
+    "title": "A model-catalogue request without a machine is a refusal, not a guess",
+    "spec_sections": [
+      "02-daemon.md ## Model catalogue",
+      "01-server.md ## Endpoints",
+      "03-wire-protocol.md ### Host events"
+    ],
+    "outcome": "GET /api/models with no daemonId is a 400; the catalogue is per machine and the server does not answer for whichever daemon happens to be attached.",
+    "evidence": "curl of the authenticated /api/models with and without daemonId, showing the 400 and, with the machine named, a real round trip to that machine's daemon."
+  },
+  {
+    "title": "Each catalogue entry names the backend serving it",
+    "spec_sections": ["02-daemon.md ## Model catalogue", "03-wire-protocol.md ### Host events"],
+    "outcome": "patch.models.response entries are {id, label, backend}, newest-first, so a surface can tell which backend a model runs on and a chat's chosen model selects its backend.",
+    "evidence": "The models response for host-a with a working credential, showing entries carrying the backend id and ordered newest-first."
+  },
+  {
+    "title": "A backend whose provider fails is reported as an error against that backend, and the backends that answered stay selectable",
+    "spec_sections": [
+      "02-daemon.md ## Model catalogue",
+      "03-wire-protocol.md ### Host events",
+      "12-error-and-offline.md ## Principles"
+    ],
+    "outcome": "A non-2xx from a provider's models endpoint (or a missing/expired credential) comes back in the response's errors[] naming that backend, alongside the models that did resolve — never papered over with a hand-maintained list and never collapsing the whole catalogue.",
+    "evidence": "A models request for a machine whose provider call is forced to a non-2xx at the network layer of the real daemon (no daemon mock), showing errors[] naming the backend with its status, captured next to a control request that succeeded."
+  },
+  {
+    "title": "A cached catalogue is served for its TTL even when a later refresh fails",
+    "spec_sections": ["02-daemon.md ## Model catalogue"],
+    "outcome": "Once a machine has read a catalogue successfully, a subsequent refresh failure inside the TTL still serves the cached entries rather than emptying the picker.",
+    "evidence": "A successful models read on host-a, then the provider forced to non-2xx, then a second read inside the TTL showing the cached entries still returned with the failure reported alongside."
+  },
+  {
+    "title": "The terminal-open request names the machine the shell starts on",
+    "spec_sections": [
+      "03-wire-protocol.md ### Terminal sessions (surface ↔ daemon)",
+      "02-daemon.md ## Terminal sessions"
+    ],
+    "outcome": "patch.terminal.open carries daemonId, and the shell that starts is on that machine — its ready.cwd and its command output reflect that machine's filesystem, not the surface's.",
+    "evidence": "A terminal session opened from a live surface against host-a, its patch.terminal.ready cwd, and the output of a command run in it identifying the sandboxed host HOME."
+  },
+  {
+    "title": "The cross-chat chat listing names each chat's machine",
+    "spec_sections": [
+      "03-wire-protocol.md ### Cross-chat tools",
+      "06-threads-manager-telegram-speakers.md ## Cross-chat toolset"
+    ],
+    "outcome": "Each entry in the cross-chat chat-listing response names the machine its chat lives on, so an agent choosing a target knows which machine it is addressing.",
+    "evidence": "An agent turn calling the list-chats tool on host-a, and the listing response frame showing a daemonId on each entry."
+  },
+  {
+    "title": "Chat state carries the effective permission mode the next turn will use",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "02-daemon.md ## Permission mode",
+      "00-overview.md ## Permission model"
+    ],
+    "outcome": "chat.state carries permissionMode resolved on the machine as chat override, then machine default, then bypassPermissions — so a surface shows the mode the next turn will use without re-deriving it from a default it does not hold.",
+    "evidence": "chat.state frames for a real chat on host-a with no override (showing the machine default) captured from a live surface."
+  },
+  {
+    "title": "A per-chat settings frame sets that chat's permission-mode override",
+    "spec_sections": [
+      "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+      "02-daemon.md ## Permission mode"
+    ],
+    "outcome": "chat.settings carrying a permissionMode is delivered to the chat's machine and takes precedence over that machine's default; the next chat.state reports the new effective mode and the machine's override count on daemon.host rises.",
+    "evidence": "The frame sent from a live surface, the chat.state that follows carrying the overridden mode, and the daemon.host re-report showing the increased override count."
+  },
+  {
+    "title": "A per-chat settings frame omitting the field CLEARS the override rather than meaning no change",
+    "spec_sections": [
+      "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+      "02-daemon.md ## Permission mode"
+    ],
+    "outcome": "chat.settings with the permission-mode field absent clears the chat's override, returning the chat to its machine's default — the deliberate opposite of a partial-update convention.",
+    "evidence": "A chat carrying an override, then a chat.settings with the field omitted, then the chat.state showing the mode back at the machine default and the override count back down."
+  },
+  {
+    "title": "A permission mode outside the set the backend accepts is refused naming the value",
+    "spec_sections": [
+      "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+      "02-daemon.md ## Permission mode"
+    ],
+    "outcome": "A permission mode outside the four the backend accepts is rejected at the boundary with the offending value named, never silently coerced to a default.",
+    "evidence": "A live WS client sending an out-of-set mode on chat.settings and on host.settings, showing the refusals and the offending value in the server log, with the chat's effective mode unchanged afterwards."
+  },
+  {
+    "title": "Renaming a machine is a frame a surface can send",
+    "spec_sections": ["03-wire-protocol.md ### Host events", "02-daemon.md ## Host identity"],
+    "outcome": "host.rename carrying daemonId and a new hostName is accepted from a surface and changes that machine's user-editable label, visible to every surface and in the host registry.",
+    "evidence": "The frame sent from a live surface, the registry/roster read back afterwards showing the new label, and a second surface's greeting carrying it."
+  },
+  {
+    "title": "An empty machine name is refused",
+    "spec_sections": ["03-wire-protocol.md ### Host events", "02-daemon.md ## Host identity"],
+    "outcome": "host.rename with an empty hostName is rejected by validation naming the field, rather than falling back to the machine hostname — a machine that silently renames itself back is indistinguishable from an edit that did not save.",
+    "evidence": "The rejected frame and the server's reason, plus the machine's label unchanged in the roster afterwards."
+  },
+  {
+    "title": "Making a machine the account's home machine is a frame a surface can send",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "06-threads-manager-telegram-speakers.md ## Where special threads run"
+    ],
+    "outcome": "host.set_home carrying daemonId marks that machine the account's home machine, and the change shows up as isHomeHost on that machine's self-description.",
+    "evidence": "The frame sent from a live surface and the daemon.host / greeting roster read back showing isHomeHost moved to the named machine."
+  },
+  {
+    "title": "Setting a machine's default permission mode is a frame a surface can send to that machine",
+    "spec_sections": ["03-wire-protocol.md ### Host events", "02-daemon.md ## Permission mode"],
+    "outcome": "host.settings carrying daemonId and a permission mode sets that machine's default; chats on it with no override report the new effective mode on their next chat.state and the machine's self-description reports the new default.",
+    "evidence": "The frame sent from a live surface at host-a, the daemon.host re-report showing the new permissionModeDefault, and a chat.state for an override-free chat on that machine showing the new effective mode."
+  },
+  {
+    "title": "Installing and removing an optional component are frames a surface can send to a named machine",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "02-daemon.md ## Optional components (large models)"
+    ],
+    "outcome": "host.component_install and host.component_remove carry daemonId and componentId and act on that machine only, moving the component's state on that machine's self-description.",
+    "evidence": "An install frame for a component host-a advertises, the component's state transitions on successive daemon.host reports, and the remove frame returning it to not-installed."
+  },
+  {
+    "title": "A component operation naming a component that machine does not offer is refused naming it",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "02-daemon.md ## Optional components (large models)"
+    ],
+    "outcome": "A component id absent from that machine's advertised components[] is rejected with the offending value named, and nothing is downloaded or deleted.",
+    "evidence": "The refused frame with the value in the daemon/server log, and the machine's components[] unchanged on the next self-description."
+  },
+  {
+    "title": "Component download progress streams live and is never persisted or replayed",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "02-daemon.md ## Optional components (large models)",
+      "12-error-and-offline.md ## Principles"
+    ],
+    "outcome": "host.component_progress carries state, received and total bytes and an optional error, streams to every connected surface while the download runs, carries no sequence number, and is absent from any replay — the settled result lands on the machine's self-description instead.",
+    "evidence": "Progress frames captured concurrently on two live surfaces during one install, showing no seq; then a fresh surface connecting after it settles, showing the component state on daemon.host and no progress frames replayed."
+  },
+  {
+    "title": "Applying an available daemon update is a frame a surface can send to a named machine",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "02-daemon.md ## Runtime and installation",
+      "02-daemon.md ## Self-upgrade"
+    ],
+    "outcome": "host.update carrying daemonId asks that machine to apply an available daemon update now, and acts on that machine alone; the machine's self-description reports its version and update state around the operation.",
+    "evidence": "The frame sent from a live surface at host-a with an update advertised, the daemon.host reports either side showing daemonVersion and updateAvailable, and host-b's version unchanged."
+  },
+  {
+    "title": "A host-scoped frame naming a machine that is not registered is refused naming the value",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "01-server.md ## Responsibilities",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "Any host-scoped control carrying a daemonId that is not a registered machine is refused with the offending value named, and is never routed to whichever machine happens to be attached.",
+    "evidence": "A live surface sending host.settings, host.folder_add and host.backend_disconnect each naming an unregistered machine, the refusals with the value in the server log, and the host-a daemon log showing none of them arrived."
+  },
+  {
+    "title": "Connecting a backend's credential with no token re-adopts what that machine already holds",
+    "spec_sections": ["03-wire-protocol.md ### Host events", "10-auth.md ## Backend credentials"],
+    "outcome": "host.backend_connect carrying daemonId and backendId but omitting token re-adopts whatever that backend already has on that machine, and the machine answers with a fresh daemon.account reporting the resulting state.",
+    "evidence": "The frame sent from a live surface at host-a after a disconnect, the daemon.account that follows showing connected true with the account it re-adopted, and the machine's credential store on disk."
+  },
+  {
+    "title": "Connecting a backend's credential with a token sets that credential on the named machine",
+    "spec_sections": ["03-wire-protocol.md ### Host events", "10-auth.md ## Backend credentials"],
+    "outcome": "host.backend_connect carrying a token sets that backend's credential on that machine only — the paste path that makes switching accounts possible from a surface with no shell on the machine.",
+    "evidence": "The frame carrying the rig's test-host token sent at host-a, the daemon.account reported back, and the credential store on that machine showing the pasted value; host-b's state unchanged over the same window."
+  },
+  {
+    "title": "Disconnecting a backend empties that backend's store on the named machine",
+    "spec_sections": ["03-wire-protocol.md ### Host events", "10-auth.md ## Backend credentials"],
+    "outcome": "host.backend_disconnect carrying daemonId and backendId empties that backend's credential store on that machine and reports the real post-disconnect state, leaving the store itself and other machines untouched.",
+    "evidence": "The frame sent at host-a, the daemon.account reporting connected false, the emptied store on that machine, and host-b's daemon.account unchanged."
+  },
+  {
+    "title": "A credential operation naming a backend that machine does not have is refused naming it",
+    "spec_sections": [
+      "03-wire-protocol.md ### Host events",
+      "10-auth.md ## Backend credentials",
+      "02-daemon.md ## Agent backends"
+    ],
+    "outcome": "host.backend_connect or host.backend_disconnect naming a backend absent from that machine's backends[] is refused with the offending value named, and no credential store is touched.",
+    "evidence": "The refused frame with the backend id in the daemon log, and the machine's credential store mtime/content unchanged."
+  },
+  {
+    "title": "A host-scoped frame addressed to another machine is not acted on by the machine that receives it",
+    "spec_sections": ["03-wire-protocol.md ### Host events", "01-server.md ## Responsibilities"],
+    "outcome": "A host-scoped control carrying a daemonId that is not the receiving machine's own is dropped by that machine with the mis-addressing logged, rather than being applied to whichever machine happened to receive it.",
+    "evidence": "host.backend_disconnect addressed to host-b delivered on host-a's link, host-a's log showing the drop with both ids, and host-a's credential store unchanged."
+  },
+  {
+    "title": "Per-chat sequence numbering stays monotonic, and the out-of-band events still carry none",
+    "spec_sections": [
+      "03-wire-protocol.md ## Goals",
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "12-error-and-offline.md ## Principles"
+    ],
+    "outcome": "Host-addressing the contract did not change sequence numbering: a chat's durable events carry a strictly increasing per-chat seq, and the events specified as out-of-band still carry none.",
+    "evidence": "The full event stream of one real chat on host-a across several turns, with the seq of each durable event listed in order and the out-of-band events shown carrying none."
+  },
+  {
+    "title": "The reconnect cursor stays exclusive",
+    "spec_sections": [
+      "12-error-and-offline.md ### Replay vs history cursors — boundary semantics (read before mixing them)",
+      "03-wire-protocol.md ### Control (anywhere ↔ server)"
+    ],
+    "outcome": "chat.replay's fromSeq remains exclusive: -1 replays everything, a value N replays only events with seq > N, and 0 deliberately skips seq 0.",
+    "evidence": "Three replays of the same real chat at fromSeq -1, 0 and a mid-stream value, with the returned seq ranges for each."
+  },
+  {
+    "title": "The history paging cursor stays inclusive",
+    "spec_sections": [
+      "12-error-and-offline.md ### Replay vs history cursors — boundary semantics (read before mixing them)",
+      "04-chats-and-folders.md ## History"
+    ],
+    "outcome": "GET /api/chats/:id/history?since stays inclusive: 0 returns everything including seq 0, and a value N returns events with seq >= N — the deliberate opposite of the replay cursor.",
+    "evidence": "History fetches of the same real chat at since=0 and at a mid-stream value, with the returned seq ranges, set against the replay ranges from the previous test."
+  },
+  {
+    "title": "Idempotency on the chat and client-generated input id still drops a duplicate",
+    "spec_sections": [
+      "03-wire-protocol.md ## Idempotency",
+      "12-error-and-offline.md ### Guaranteed input delivery (surface → daemon)"
+    ],
+    "outcome": "Two chat.input frames carrying the same chatId and localId produce exactly one user message and one turn; the duplicate is dropped without an error and without a second run.",
+    "evidence": "The duplicate submission from a live surface, the chat's replayed transcript showing one user message, and the daemon log showing the dedupe."
+  },
+  {
+    "title": "The live-only events are never persisted and never replayed",
+    "spec_sections": [
+      "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+      "02-daemon.md ## Streaming assistant text",
+      "12-error-and-offline.md ## Principles"
+    ],
+    "outcome": "The streamed text chunks, the queue and dequeue notices and the input acknowledgement are delivered live and are absent from a subsequent replay of the same chat, which carries only the durable record.",
+    "evidence": "A live capture of one real turn on host-a showing the delta/queued/dequeued/ack frames as they arrive, followed by a full replay of that chat from -1 containing none of them."
+  },
+  {
+    "title": "The audio session keeps its binary framing alongside JSON control frames",
+    "spec_sections": [
+      "03-wire-protocol.md ### Audio session (surface ↔ daemon)",
+      "03-wire-protocol.md ## Encoding"
+    ],
+    "outcome": "Audio still travels as binary PCM16 frames on the audio WSS while control frames stay JSON, and nothing in the audio session carries a sequence number.",
+    "evidence": "A live audio session against host-a showing the binary mic/TTS frames by opcode and byte length next to the JSON control frames, with no seq on any of them."
+  },
+  {
+    "title": "The web surface decodes and renders the machine-addressed contract",
+    "spec_sections": [
+      "18-tech-stack.md ## Wire protocol package (`packages/wire`)",
+      "14-design-web.md ## Settings",
+      "05-surfaces.md ## Web"
+    ],
+    "outcome": "A real logged-in web surface against the live server renders the machine list from the greeting, groups folders and chats by machine, and logs no decode error for any frame the daemon emits.",
+    "evidence": "Browser screenshots of the Hosts list and the machine-grouped new-chat picker, with the browser console empty of wire decode errors across a spawn and a turn."
+  },
+  {
+    "title": "The command line decodes the machine-addressed contract",
+    "spec_sections": [
+      "17-cli.md ## Commands",
+      "18-tech-stack.md ## Wire protocol package (`packages/wire`)"
+    ],
+    "outcome": "The CLI, run against the live server and the host-a daemon, reads and prints the host-addressed frames without a decode failure.",
+    "evidence": "CLI invocations against the live stack with their raw output, including a chat listing showing each chat's machine."
+  },
+  {
+    "title": "A webhook on the unguessable job id is accepted and dispatched",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ### Webhook",
+      "08-triggers-and-jobs.md ## Execution model",
+      "10-auth.md ## Tokens on the wire"
+    ],
+    "outcome": "A POST to a job's server-issued webhook URL whose trigger scheme is none is accepted and its action dispatched to the machine the action names, with the fire recorded in that job's run log.",
+    "evidence": "The created job's JSON, the accepted POST, the chat.spawned observed at a live surface on the named machine, and the run-log line for the fire."
+  },
+  {
+    "title": "A webhook naming a job that does not exist is refused with nothing dispatched",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ## Execution model",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "An inbound to an unknown or malformed job id is refused before any filesystem or dispatch work, no chat is spawned or messaged on any machine, and the rejection is logged with its reason.",
+    "evidence": "POSTs to a well-formed-but-unknown job id and to a malformed one with their responses, the host-a daemon log over the same window showing no inbound, and the server log lines."
+  },
+  {
+    "title": "A generic HMAC webhook with a valid signature is accepted",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ### Webhook",
+      "08-triggers-and-jobs.md ## Execution model"
+    ],
+    "outcome": "A job with the hmac-sha256 scheme accepts a body whose X-Patch-Signature is the hex HMAC of that exact body under the job's secret, and dispatches the action.",
+    "evidence": "The signed POST, its 2xx, the dispatched action observed on the named machine, and the inbound log line recording the signature as verified."
+  },
+  {
+    "title": "A generic HMAC webhook whose signature does not verify is a rejection, not a warning",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ### Webhook",
+      "10-auth.md ### The authority of a turn",
+      "08-triggers-and-jobs.md ## Logs"
+    ],
+    "outcome": "A wrong signature, a malformed signature and a missing signature header each get a 401, dispatch nothing, and leave an inbound-log line naming the reason; the job's run log gains no run.",
+    "evidence": "Three POSTs (wrong, malformed, absent) with their 401s and reasons, the job's inbound log showing all three, and its run log showing no new run."
+  },
+  {
+    "title": "A GitHub-scheme webhook verifies its own signature header",
+    "spec_sections": ["08-triggers-and-jobs.md ### Webhook"],
+    "outcome": "A job declaring the github scheme accepts a correctly-computed X-Hub-Signature-256 and refuses a missing or malformed one with a 401, dispatching nothing.",
+    "evidence": "A correctly signed POST with its 2xx and dispatched action, and a missing-header POST with its 401 and the inbound-log reason."
+  },
+  {
+    "title": "A Stripe-scheme webhook verifies its own signature header",
+    "spec_sections": ["08-triggers-and-jobs.md ### Webhook"],
+    "outcome": "A job declaring the stripe scheme accepts a correctly-signed event and refuses a missing or malformed signature with a 401, dispatching nothing.",
+    "evidence": "A correctly signed POST with its 2xx, and a bad-signature POST with its 401 and the inbound-log reason, with the daemon log showing nothing arrived for the bad one."
+  },
+  {
+    "title": "Verification happens before dispatch, so a rejected inbound reaches no machine at all",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ## Execution model",
+      "10-auth.md ### The authority of a turn",
+      "01-server.md ## Responsibilities"
+    ],
+    "outcome": "For every rejected inbound — bad signature, unknown job, disallowed sender — no chat is spawned or messaged on any machine and no action is buffered for a machine to pick up later; the refusal is complete before anything is dispatched.",
+    "evidence": "A batch of rejected inbounds across the schemes, with the host-a daemon log and chat list unchanged over the window, and the server's pending-action directory empty of anything from those fires."
+  },
+  {
+    "title": "A calendar push with a missing or mismatched channel token is refused and logged",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ### Google Calendar",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "A push to a calendar job's endpoint whose channel token is absent or does not match the token established when the channel was created is refused with a 401, dispatches nothing, and leaves an inbound-log line naming the reason.",
+    "evidence": "Pushes with no token and with a wrong token, their 401s, the inbound log lines, and the daemon log showing nothing arrived."
+  },
+  {
+    "title": "A Todoist push with a missing or bad signature is refused and logged",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ### Todoist",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "A push to a todoist job's endpoint with no X-Todoist-Hmac-SHA256, or one that does not verify against the job's client secret, is refused with a 401, dispatches nothing, and leaves an inbound-log line naming the reason.",
+    "evidence": "Pushes with the header absent and with a wrong signature, their 401s, the inbound log lines, and the run log showing no run."
+  },
+  {
+    "title": "A Telegram update without the shared secret token is refused",
+    "spec_sections": [
+      "06-threads-manager-telegram-speakers.md ## Telegram thread",
+      "01-server.md ## Endpoints",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "A POST to the Telegram webhook with a missing or wrong X-Telegram-Bot-Api-Secret-Token is refused with a 401 and nothing is delivered into the Telegram thread.",
+    "evidence": "Two POSTs (absent and wrong secret) with their 401s, and the daemon log showing no chat.input for the Telegram thread over the window."
+  },
+  {
+    "title": "A Telegram message from a sender who is not the allowed one is dropped",
+    "spec_sections": [
+      "06-threads-manager-telegram-speakers.md ## Telegram thread",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "A correctly-secreted update whose from.id is not the single allowed sender delivers nothing into the Telegram thread and is logged as dropped with the sender named — an unexpected sender is a rejection, not a warning.",
+    "evidence": "The POST with a foreign from.id, the server log line naming the sender and the expected id, and the Telegram thread's transcript unchanged."
+  },
+  {
+    "title": "A Telegram message from the allowed sender lands in the thread as a normal user turn",
+    "spec_sections": ["06-threads-manager-telegram-speakers.md ## Telegram thread"],
+    "outcome": "A correctly-secreted update from the allowed sender is delivered into the Telegram thread as an ordinary user turn carrying its telegram source, proving the gate refuses without breaking the ingress it protects.",
+    "evidence": "The accepted POST, the chat.input delivered to the home machine's daemon carrying the telegram source, and the resulting turn in the thread."
+  },
+  {
+    "title": "An inbound arriving faster than the route accepts is refused",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ## Execution model",
+      "10-auth.md ## What's trusted vs untrusted"
+    ],
+    "outcome": "Inbound webhook traffic beyond the route's rate limit is refused rather than dispatched, so an untrusted caller cannot drive unbounded turns on a machine.",
+    "evidence": "A burst past the limit against one job's webhook URL, with the response-code histogram showing the refusals and the daemon's chat list showing only the accepted fires ran."
+  },
+  {
+    "title": "Job definitions cannot be written without a credential, so the schedule ticker cannot be given work anonymously",
+    "spec_sections": [
+      "08-triggers-and-jobs.md ## CRUD",
+      "01-server.md ## Endpoints",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "The job CRUD API refuses an unauthenticated or bad-credential caller, so the only route into the cron scheduler — a stored job definition — is behind a surface credential; the ticker itself exposes no inbound endpoint.",
+    "evidence": "Unauthenticated and bad-token POST/PATCH/DELETE against /api/jobs with their 401s, plus the jobs directory unchanged, and a probe showing no unauthenticated path that causes a tick to dispatch."
+  },
+  {
+    "title": "Every rejected inbound is visible in the log a person can read back",
+    "spec_sections": ["08-triggers-and-jobs.md ## Logs", "01-server.md ## Endpoints"],
+    "outcome": "GET /api/jobs/:id/webhooks returns every inbound hit including the signature failures and the filter rejections, each with its reason, while GET /api/jobs/:id/runs shows no run for them — so a job that silently did nothing is diagnosable after the fact.",
+    "evidence": "The two authenticated endpoint responses after a mixed batch of accepted and rejected inbounds, lined up against what was actually sent."
+  },
+  {
+    "title": "The daemon's local control socket is owner-only",
+    "spec_sections": [
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "The daemon creates its control socket at the fixed path under its own ~/.patch with mode 0600, owned by the user it runs as, so same-user/same-machine remains the real boundary.",
+    "evidence": "stat of the socket on the running rig host showing mode and owner, with the daemon's own uid."
+  },
+  {
+    "title": "The daemon mints its local key on every start and keeps it beside the socket, owner-only",
+    "spec_sections": [
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "On start the daemon generates the bearer key itself and writes it to ~/.patch/local.key at mode 0600, in the same directory as the socket, so every caller on that machine can find it without a discovery step.",
+    "evidence": "stat and content shape of local.key on a freshly started rig host, with the daemon start log."
+  },
+  {
+    "title": "The key rotates on every start, so the previous run's key stops working",
+    "spec_sections": ["02-daemon.md ## Control IPC (local CLI ↔ daemon)"],
+    "outcome": "Restarting the daemon replaces the key; a caller holding the value from the previous run is refused, and a caller reading the file afresh succeeds.",
+    "evidence": "A socket call succeeding with the pre-restart key, the service restarted under launchd, the same call refused with 401 after, and the same call succeeding again with the newly-read key."
+  },
+  {
+    "title": "There is no way to supply the local key from outside the daemon",
+    "spec_sections": [
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "The key is not configuration: starting the daemon with the key environment variable set does not adopt that value — the daemon still mints its own and the externally-supplied value is refused on the socket.",
+    "evidence": "A rig host started with the env var set to a known value, the local.key file showing a different value, and a socket call presenting the supplied value refused with 401."
+  },
+  {
+    "title": "A socket call with no bearer is refused on every authority-bearing route",
+    "spec_sections": [
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "Every route on the control socket except the health endpoint answers 401 to a request carrying no Authorization header — including the routes that spawn chats, message chats, notify, schedule a wake and create a job.",
+    "evidence": "An enumerated sweep of the socket's routes with no bearer, listing method, path and status for each, showing 401 everywhere but the health endpoint."
+  },
+  {
+    "title": "A socket call with the wrong bearer is refused, including the tool-child routes that cause turns",
+    "spec_sections": [
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+      "02-daemon.md ## MCP server",
+      "10-auth.md ### The authority of a turn"
+    ],
+    "outcome": "A request presenting a wrong or stale bearer is refused with 401 on every gated route, and nothing it asked for happens — no chat spawned, no message delivered, no wake armed, no job written.",
+    "evidence": "The same route sweep with a wrong bearer, plus the daemon's chat list, wake files and the server's jobs directory unchanged over the window."
+  },
+  {
+    "title": "An unknown route on the socket is refused rather than 404'd, so the route map is not probeable",
+    "spec_sections": ["02-daemon.md ## Control IPC (local CLI ↔ daemon)"],
+    "outcome": "An unauthenticated request to a path the socket does not serve answers 401, not 404, so an unauthenticated caller cannot tell which routes exist.",
+    "evidence": "Unauthenticated requests to a real route and to several invented paths, showing the same 401 for all of them."
+  },
+  {
+    "title": "The health endpoint stays open so a service manager can probe it",
+    "spec_sections": [
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+      "02-daemon.md ## Runtime and installation"
+    ],
+    "outcome": "The health endpoint on the control socket answers without a bearer, because it carries no authority and is what a service manager probes.",
+    "evidence": "An unauthenticated health request on the running rig host with its 200 and body."
+  },
+  {
+    "title": "The tool child is handed the current key and its calls succeed",
+    "spec_sections": [
+      "02-daemon.md ## MCP server",
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)"
+    ],
+    "outcome": "The daemon passes the current key in the environment of the tool child each query launches, and that child's calls back over the socket are accepted and take effect.",
+    "evidence": "A real agent turn on host-a invoking a patch tool that causes a side effect, the child process's environment showing the key the daemon minted, and the socket audit line for the accepted call."
+  },
+  {
+    "title": "A tool child started without a key fails at startup",
+    "spec_sections": ["02-daemon.md ## MCP server"],
+    "outcome": "A tool child launched with no key exits at startup rather than running and making calls that would be refused anyway — a child with no key was not started by a daemon.",
+    "evidence": "The tool-child binary launched by hand on the rig host with the key absent from its environment, showing the startup failure and its message."
+  },
+  {
+    "title": "The tool child is identified by the environment the daemon set for it, not by the key it presents",
+    "spec_sections": [
+      "02-daemon.md ## MCP server",
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)"
+    ],
+    "outcome": "The chat a tool call is attributed to comes from the identity the daemon baked into that child's environment; holding a valid key does not let a caller claim another chat's identity.",
+    "evidence": "Two chats running turns on host-a, the socket audit lines showing each tool call attributed to the chat whose child made it, and a hand-made call with a valid key attempting to claim a different chat, showing it gains no identity from the key."
+  },
+  {
+    "title": "The command line on that machine reads the key from the file",
+    "spec_sections": ["02-daemon.md ## Control IPC (local CLI ↔ daemon)", "17-cli.md ## Commands"],
+    "outcome": "The CLI run on the daemon's own machine finds the key at the fixed path beside the socket and its local commands succeed against the running daemon, with no key supplied by the operator.",
+    "evidence": "CLI invocations inside the rig host's environment with no key in the environment, showing successful output, and the daemon's socket log recording the accepted calls."
+  },
+  {
+    "title": "With the key file absent the command line fails loudly rather than sending an empty bearer",
+    "spec_sections": [
+      "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+      "12-error-and-offline.md ## Principles"
+    ],
+    "outcome": "If the key file is missing or empty — a daemon that is gone, or a rotation mid-flight — the CLI's socket call fails clearly rather than presenting an empty bearer that reads as a bug somewhere else.",
+    "evidence": "The CLI run with local.key removed and again with it emptied, showing the refusal and its message in both cases, and the daemon log showing the rejected call."
+  }
+]

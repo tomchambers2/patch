@@ -1,0 +1,1198 @@
+[
+  {
+    "group-id": "A1",
+    "name": "Wire contract — every event knows which machine it is about",
+    "complete": true,
+    "success": true,
+    "dependentOnGroups": [],
+    "tasks": [
+      {
+        "task": "The event protocol assumes there is exactly one machine running agent sessions. It must become host-addressed, and it lands first because every other package builds against it.\n\nThis is a deliberate breaking change to a named set of events, not an additive one. Each of the following gains a host identifier, and every producer and consumer of it changes in this same group so nothing is left decoding an older shape:\n\n- the spawned-chat event, carrying the machine the chat is pinned to, fixed for that chat's life\n- the spawn request, where naming a machine is REQUIRED\n- host presence online and offline, each naming the machine it describes\n- the unauthenticated report, naming both the machine and the agent backend whose credential is missing or expired\n- the folder-registry snapshot and its change push, each naming the machine whose filesystem they describe\n- the directory-browse request and response, addressed to one machine at a time\n- the model-catalogue request and response, where each returned entry additionally names the backend serving it and the response can carry a per-backend error list alongside the models that did resolve\n- the terminal-open request, naming the machine the shell starts on\n- the cross-chat spawn call, naming the machine the new chat is created on\n- the cross-chat chat-listing response, where each listed chat names its machine\n- chat state, which additionally carries the effective permission mode the next turn will use\n- the greeting the server sends a surface on connect, which now carries every registered machine with its presence, its last self-description and its last per-backend account report, alongside the web-bundle hash it already carried\n\nThe existing single-backend account report is replaced by a per-backend one identifying machine and backend together, and the existing account-wide connect and disconnect frames are replaced by the per-machine, per-backend pair enumerated below.\n\nEvery host-scoped control any surface changes has a surface-originated frame here carrying the machine id — no exceptions, because a surface with no frame to send renders a read-only list instead and the setting becomes reachable from one surface and not another. The daemon-owned lists are paired: a snapshot and a change push outward, an edit frame inward. The folder registry is the case that was previously outward-only.\n\nNew frames to define:\n\n- a machine's self-description: its id, its user-editable name, platform, architecture, daemon version, whether an update is available for it, its default permission mode, a count of its chats carrying a per-chat override, its last-used model (absent until it has one), whether it is the account's home machine, its provisioned agent backends (id, label, version, state) and its optional components (id, label, size in bytes, a state of not-installed / downloading / installed / failed, plus optional progress and error)\n- surface to server: rename a machine; make a machine the account's home machine\n- surface to a machine: set that machine's default permission mode; install or remove an optional component; apply an available daemon update now; add a project root to that machine's folder registry and remove one from it; connect one backend's credential on that machine, carrying an OPTIONAL token where omitting it means re-adopt whatever that backend already has there, and disconnect one backend's credential on that machine\n- a machine to surfaces: live component-download progress carrying state, received and total bytes and an optional error\n- surface to a machine: a per-chat settings frame carrying that chat's permission-mode override, where omitting the field CLEARS the override rather than meaning no change\n\nModel is OPTIONAL at every spawn site — the surface spawn request and the agent's cross-chat spawn alike. The contract must not oblige any caller to supply one; resolving what a chat actually runs on belongs to the machine, not to the protocol.\n\nWhat must NOT change, and must be regression-guarded: per-chat monotonic sequence numbering and which events carry a sequence at all; the deliberately opposite boundary conventions of the reconnect cursor (exclusive) and the history paging cursor (inclusive); idempotency on the pairing of chat and client-generated input id; which events are live-only and therefore never persisted or replayed — the streamed text chunks, the queue and dequeue notices, the input acknowledgement, and the new component-progress frame whose settled result lands on the machine's self-description instead; and the binary framing of audio. The client's own connect greeting gains an optional source commit and build instant for version reporting.\n\nUnhappy paths belong here because this is the cheapest place to catch them: a spawn request naming no machine; a frame naming a machine that is not registered; a component operation naming a component that machine does not offer; a permission mode outside the set the backend accepts; an empty machine name; a folder-registry edit carrying an empty path; a credential operation naming a backend that machine does not have. Each is rejected by validation with the offending value named — never silently defaulted, dropped, or routed to whichever machine happens to be attached.\n\nThe contract ships as runtime validation and types together, and every consuming package compiles and decodes against it before this group is done.",
+        "spec_sections": [
+          "03-wire-protocol.md ## Goals",
+          "03-wire-protocol.md ## Idempotency",
+          "03-wire-protocol.md ## Event categories",
+          "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+          "03-wire-protocol.md ### Host events",
+          "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+          "03-wire-protocol.md ### Terminal sessions (surface ↔ daemon)",
+          "03-wire-protocol.md ### Cross-chat tools",
+          "03-wire-protocol.md ### Control (anywhere ↔ server)",
+          "02-daemon.md ## Host identity",
+          "02-daemon.md ## Agent backends",
+          "02-daemon.md ## Permission mode",
+          "02-daemon.md ## Optional components (large models)",
+          "02-daemon.md ## Model catalogue",
+          "04-chats-and-folders.md ## Chat model",
+          "04-chats-and-folders.md ## Spawn",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "04-chats-and-folders.md ### Browsing (directory listing)",
+          "10-auth.md ## Backend credentials",
+          "12-error-and-offline.md ### Replay vs history cursors — boundary semantics (read before mixing them)",
+          "18-tech-stack.md ## Wire protocol package (`packages/wire`)"
+        ],
+        "complete": true
+      }
+    ]
+  },
+  {
+    "group-id": "TA1",
+    "name": "Testing A1 (wire contract)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"],
+    "tests": [
+      {
+        "id": "A1-1",
+        "behaviour": "A spawn that names no machine, or an unknown one, is rejected by validation naming the offending value — never defaulted to whichever daemon is attached.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Bring up the server with at least one real daemon registered, and find how a surface asks for a new chat on a named machine.",
+          "Attempt a spawn with the machine identifier absent entirely, and again with a syntactically valid but unregistered machine identifier.",
+          "Watch both the immediate response AND the daemon side: check whether any agent session was actually created on the attached daemon.",
+          "Repeat the same probe for any other host-scoped frame (a host setting, a folder edit, a component operation) using an unregistered machine id."
+        ],
+        "expect": "PASS = each attempt is refused by validation with an error that names the offending field/value (missing machine id / the unregistered id), and NO chat, folder change or host mutation is created anywhere. FAIL if the request is accepted, silently defaulted to the only/attached daemon, coerced to a default machine, or if it errors generically without naming what was wrong. A rejection observed only in unit tests of the schema does NOT count — the rejection must be observed against the running server/daemon, and the absence of a side-effect must be positively checked (listing chats afterwards), not inferred from the error alone.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-2",
+        "behaviour": "A chat is pinned to the machine named at spawn and every event about that chat carries that machine identifier for its whole life.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Run TWO real daemons (two distinct registered machines) against one server simultaneously.",
+          "Spawn a chat naming machine B while machine A is also online, send it a turn that produces messages/tool activity, and capture the full event stream a surface sees.",
+          "Verify the machine identifier on the spawned event and confirm the work actually ran on B (e.g. by a turn whose output is machine-distinguishing, such as the working directory or hostname visible on B only).",
+          "Reconnect a surface and replay the chat; confirm the machine identity is still B and unchanged."
+        ],
+        "expect": "PASS = the spawned event carries B, the turn demonstrably executed on B (evidence from B's own filesystem/process, not just the event's own field), and the pinning survives reconnect/replay. FAIL if the chat runs on A, if any consumer has to infer the host from 'the daemon that happens to be connected', or if the machine field is absent/empty on any chat-scoped event. A single-daemon run does NOT satisfy this test — with only one daemon online, correct routing is indistinguishable from routing to whatever is attached.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-3",
+        "behaviour": "The greeting the server sends a surface on connect enumerates every registered machine with presence, last self-description, and last per-backend account report, alongside the web-bundle hash.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "With two daemons registered — one online, one deliberately stopped — connect a fresh surface client to the server and capture the server's reply to the connect frame.",
+          "Inspect the reply for the list of machines: for each, its presence/last-seen, its cached self-description, and its cached per-backend credential report; and for the bundle hash it already carried.",
+          "Change something on a live machine (e.g. its name or a component/credential state), then connect a SECOND, brand-new surface that was not connected when the change happened."
+        ],
+        "expect": "PASS = the greeting lists BOTH machines (including the offline one, marked not-online with its cached self-description and account report), carries the web-bundle hash, and the late-joining surface receives the post-change values from the greeting alone without having to ask. FAIL if the offline machine is omitted, if any of presence / self-description / per-backend account report is missing or is an account-wide (non-per-machine, non-per-backend) shape, or if the late surface only learns the state after a subsequent live push. Reading the server's cache directly does NOT count — the evidence must be the greeting frame actually received by a client.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-4",
+        "behaviour": "Backend credentials are addressed per machine AND per backend: connect (with or without a token) and disconnect act on exactly one backend on one machine and are reported back per backend.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "On a real host with a real, logged-in agent backend, observe the account report a surface receives and confirm it identifies both the machine and the backend (not an account-wide 'connected' flag).",
+          "Disconnect that backend's credential on that machine, then re-connect it with the token field OMITTED (the re-adopt path), and observe the reports emitted after each action.",
+          "Verify the real side-effect on the host each time — the daemon's own credential store on disk actually emptied, then actually repopulated — and confirm a real turn can run afterwards.",
+          "Attempt a credential operation naming a backend that machine does not have, and (with two machines online) confirm an operation aimed at machine A leaves machine B's credential state untouched."
+        ],
+        "expect": "PASS = each report names machine+backend; disconnect demonstrably empties that host's credential store and connect-without-token demonstrably restores a working credential (proved by a real turn succeeding after re-connect, against the real backend); the unknown-backend operation is rejected naming the offending backend; machine B is unaffected. FAIL if any report is account-wide, if the state change is only reflected in an event with no on-host change, or if an unknown backend is accepted/ignored. A stubbed or in-memory credential store does NOT count — the real store on the real host must be observed changing, and the post-connect turn must reach the real agent backend.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-5",
+        "behaviour": "The unauthenticated report names both the machine and the backend whose credential is missing or expired.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Put one backend on one real host into a genuinely credential-less state (using the product's own disconnect path rather than editing internals, if possible).",
+          "Attempt to run a turn on that backend on that host and capture what surfaces receive.",
+          "With two machines online, confirm the report identifies which machine is affected and that the other machine's chats keep running."
+        ],
+        "expect": "PASS = an unauthenticated report is emitted carrying BOTH the machine identifier and the backend identifier, the turn is refused rather than hanging, and the unaffected machine keeps serving turns. FAIL if the report omits either identifier, if it is account-wide, or if the surface has to guess which host is logged out. Reconstructing this from log lines does NOT count — it must be the protocol frame a connected surface receives. If the state cannot be induced without destroying a credential that cannot be restored, report it as an environmental blocker rather than mocking it.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-6",
+        "behaviour": "Each machine's folder registry is published per machine (snapshot + change push) and edited by machine-addressed inbound frames, with empty and non-existent paths refused.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "With two daemons online, connect a surface and capture the folder-registry snapshots — confirm each is attributed to a specific machine.",
+          "Add a real existing directory as a project root on machine A, then remove it, capturing what surfaces receive after each edit, and verify the daemon's own persisted registry on A actually changed.",
+          "Confirm machine B's published registry is untouched by the A edits, and that the same path string on B is a separate entry.",
+          "Attempt an edit carrying an empty path, and an edit carrying a path that does not exist on that machine."
+        ],
+        "expect": "PASS = a snapshot arrives per machine on connect, every add/remove produces a change push naming the edited machine, the on-disk registry of A reflects the edit, B is unchanged, and both the empty path and the non-existent path are refused with the offending value named. FAIL if the registry is outward-only with no inbound edit frame, if a push omits the machine identifier, if two machines' registries merge into one list, or if an invalid path is accepted/silently dropped. An event echo with no corresponding change in the daemon's persisted registry does NOT count as an add.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-7",
+        "behaviour": "Directory browsing is addressed to one machine at a time and returns that machine's filesystem, refusing traversal outside its designated roots.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "With two daemons whose filesystems differ in a recognisable way (create a uniquely-named directory under a registered root on machine A only), issue a browse addressed to A and then the same browse addressed to B.",
+          "Confirm each response is attributable to the machine it was asked of, and that the listing content matches that machine's real filesystem (child directories only).",
+          "Attempt to browse a path that escapes the machine's designated roots (relative traversal or an absolute path outside them)."
+        ],
+        "expect": "PASS = the A-addressed browse shows the uniquely-named directory and the B-addressed browse does not; each response carries/identifies its machine; and the escaping path is refused with a not-found style error rather than returning a listing of the root or home directory. FAIL if the browse resolves against the server's or the surface's own filesystem, if the machine cannot be named in the request, or if traversal outside the roots yields any listing. Comparing against a fixture directory tree does NOT count — the uniqueness marker must be created on the real host and observed only in that host's response.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-8",
+        "behaviour": "The model catalogue is requested per machine and each returned entry names its serving backend; per-backend failures are returned alongside the models that did resolve.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Ask a real, credentialed host for its model catalogue and inspect the response: entries, their ordering, and whether each entry names the backend that serves it.",
+          "Confirm the list came from a real provider read (models present that are not hard-coded in the repo — cross-check the source for a static list).",
+          "Induce a failure for one backend on a host that has at least one working backend (or, if only one backend exists, on a host whose credential is absent) and request the catalogue again.",
+          "Request the catalogue addressed to a second machine and confirm the response is attributed to the machine asked."
+        ],
+        "expect": "PASS = every entry names its backend, the response carries a per-backend error list, and in the induced-failure case the failing backend appears in the errors WHILE models from any backend that answered remain present in the same response. FAIL if entries lack a backend field, if a single backend failure empties or fails the whole response, if there is no error channel at all, or if the catalogue is a hard-coded list in the repo. A recorded/fixture provider response does NOT count — the models must come from the real provider over the real credential.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-9",
+        "behaviour": "A terminal-open request names the machine and the shell genuinely starts on that machine.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "With two daemons online, open a terminal session naming machine A and run a command whose output uniquely identifies the host (hostname, or a file that exists only on A).",
+          "Repeat naming machine B and compare the outputs.",
+          "Attempt to open a terminal naming an unregistered machine."
+        ],
+        "expect": "PASS = the A session's output identifies A, the B session's identifies B, and the unregistered machine is refused naming it. FAIL if the machine cannot be named in the open request, if both sessions land on the same host, or if the session silently starts wherever the daemon connection happens to point. Verifying only that a ready frame came back does NOT count — you must observe host-distinguishing command output from inside the shell.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-10",
+        "behaviour": "Cross-chat tool frames are host-addressed: an agent's spawn call names the machine to create on, and each entry of a chat listing names its machine.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "With two daemons online, drive a real agent turn in a chat on machine A that uses the cross-chat spawn capability targeting machine B.",
+          "Confirm the new chat was actually created on B (its work runs on B's filesystem) and that the frames a surface sees show the cross-chat activity with the target machine named.",
+          "Exercise the cross-chat chat-listing capability and inspect every returned entry for its machine identifier, with chats existing on both machines.",
+          "Check whether the cross-chat spawn can be made without naming a model."
+        ],
+        "expect": "PASS = the spawned chat lives on B with evidence from B itself, the listing attributes each chat to its own machine (chats on A and B distinguishable), and a spawn omitting the model succeeds. FAIL if the cross-chat spawn has no way to name a machine, if it lands on the caller's own host regardless, if listing entries are machine-less, or if the model is mandatory. Calling the underlying function directly in a unit test does NOT count — it must go through a real agent turn issuing the tool call over the live stack.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-11",
+        "behaviour": "Chat state carries the effective permission mode for the next turn; a per-chat override can be set and is CLEARED by omitting the field; invalid modes are rejected.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Read a chat's state on a live host and note the effective permission mode reported with no override in place; confirm it matches the machine's default.",
+          "Set the machine's default to a different accepted mode and confirm chats without an override report the new effective mode.",
+          "Set a per-chat override to a third accepted mode, confirm the chat's reported effective mode changes, then send the per-chat settings frame with the mode field OMITTED and re-read the state.",
+          "Attempt to set a permission mode value the backend does not accept, and attempt a machine rename with an empty name."
+        ],
+        "expect": "PASS = effective mode resolves override → machine default → the documented fallback and is visible on chat state; omitting the field on the per-chat settings frame CLEARS the override so the chat falls back to the machine default (it must NOT be treated as 'leave unchanged'); the invalid mode and the empty machine name are both refused with the offending value named. FAIL if chat state has no effective-mode field, if omission is a no-op, or if an out-of-set mode is accepted or silently coerced. Reading a config file does NOT count — the effective mode must be observed on the chat-state frame a surface receives.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-12",
+        "behaviour": "Each machine publishes a complete self-description, and rename / set-home take effect from a surface-originated frame.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Capture a live machine's self-description and check every advertised field is present and plausible: identifier, editable name, platform, architecture, daemon version, update-available flag, default permission mode, the count of its chats carrying a per-chat override, last-used model (may be absent before any catalogue read), home-machine flag, provisioned backends with id/label/version/state, and optional components with id/label/size/state.",
+          "Rename the machine from a surface and confirm a fresh self-description carries the new name and that it persists across a daemon restart.",
+          "Give one chat on that machine a permission-mode override and confirm the override count in the self-description moves; clear it and confirm it moves back.",
+          "With two machines registered, make the second one the account's home machine and confirm exactly one machine reports the home flag afterwards."
+        ],
+        "expect": "PASS = every listed field appears (last-used model may be legitimately absent only on a machine that has never read a catalogue), rename survives a daemon restart, the override count tracks real per-chat overrides, and setting home moves the flag so exactly one machine holds it. FAIL if any field is missing or hard-coded, if the override count is static, if renaming requires editing a file on the host, or if two machines simultaneously claim home. Values asserted from a schema/type definition rather than from a live emitted description do NOT count.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-13",
+        "behaviour": "Optional components are installed/removed per machine with live progress frames, and the settled result lands on that machine's self-description.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Read a machine's advertised optional components and their states.",
+          "Trigger an install of one component on that machine from a surface and observe the live progress frames while it runs — check they carry the machine, the component, a state, and received/total byte counts that actually advance.",
+          "Let it settle, then confirm the component's installed state appears on the machine's self-description AND the payload really exists on that host's disk at roughly the advertised size.",
+          "Remove it and confirm both the on-disk removal and the state change; then attempt an install naming a component that machine does not offer."
+        ],
+        "expect": "PASS = progress frames stream with advancing byte counts, the settled state is reflected on the self-description (not only on the transient progress frame), the real bytes appear on and later disappear from the host's disk, and the unknown component id is refused naming it. FAIL if progress is synthetic/instant, if the settled state only lives on the progress frame, if nothing lands on disk, or if an unoffered component id is accepted. If the download cannot complete for a genuine environmental reason (no network egress to the weights host, insufficient disk), report it as an environmental blocker — do not substitute a stub download.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-14",
+        "behaviour": "Regression: per-chat sequence numbering stays monotonic, and the live-only events (streaming text chunks, queue/dequeue notices, input acknowledgement, component progress) are never persisted or replayed.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Drive a real chat through a turn that produces streaming text, a queued-then-running second input, and an input acknowledgement; capture the complete live event stream.",
+          "Check the sequence numbers on the events that carry them are strictly increasing per chat and that the live-only event kinds carry no sequence of their own.",
+          "Disconnect the surface, reconnect and replay the chat from the beginning, and also fetch the chat's history through the non-WebSocket path.",
+          "Trigger a component-download progress frame, then replay/refetch and check whether it reappears."
+        ],
+        "expect": "PASS = sequences are per-chat monotonic with no gaps introduced or duplicates; on replay and on history fetch the finalised messages appear exactly once and NONE of the streaming chunks, queue/dequeue notices, input acknowledgements or component-progress frames reappear. FAIL if any live-only event is replayed or persisted, if a live-only event has acquired its own sequence number, or if replay duplicates a message. Inspecting a persistence module's code does NOT count — the check must be on the actual replayed/refetched stream.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-15",
+        "behaviour": "Regression: the reconnect cursor is exclusive and the history paging cursor is inclusive — the two boundaries stay deliberately opposite.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Build a chat with several sequenced events and note a specific event's sequence number, N.",
+          "Request a reconnect-style replay using N as the cursor and record which events come back relative to N.",
+          "Request the paged history through the HTTP-style path using N as the cursor and record which events come back relative to N.",
+          "Also exercise the documented 'give me everything' value for each path and confirm nothing at the very start of the chat is skipped."
+        ],
+        "expect": "PASS = the replay returns strictly events after N (N itself excluded) while the history fetch returns N itself and later (inclusive), and each path's full-history value genuinely returns the first event of the chat. FAIL if both cursors behave the same way, if either is off by one, if the 'everything' value skips the first event, or if someone has 'aligned' the two conventions. Asserting from documentation or type comments does NOT count — both requests must be issued against the live stack and their returned sequence numbers compared.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-16",
+        "behaviour": "Regression: input idempotency is keyed on the pairing of chat and client-generated input id.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Send the same user input twice to one chat with an identical client-generated id (simulating a retry), and observe both the acknowledgements and the chat's resulting messages.",
+          "Send an input with the same client-generated id but to a DIFFERENT chat.",
+          "Send two genuinely distinct inputs with distinct ids and confirm both land.",
+          "Confirm the outcome in the chat's persisted history after a replay, not just in the live stream."
+        ],
+        "expect": "PASS = the duplicate produces exactly one user turn in the chat (in live stream and in replayed history), the same id reused on a different chat is NOT suppressed, and distinct ids both land. FAIL if the duplicate creates two turns, if the second one errors loudly instead of being quietly dropped, or if the id is treated as globally unique across chats. Checking only that the same acknowledgement came back twice does NOT count — the message count in replayed history is the evidence.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-17",
+        "behaviour": "Regression: the audio session's framing is unchanged — control frames textual, mic and TTS payloads binary, nothing sequenced or replayed.",
+        "surface": "voice",
+        "reviewer": "spec-reviewer",
+        "steps": [
+          "Open a real audio session against a live host using the product's own session-opening path and capture the frames on the wire.",
+          "Confirm the control frames are the textual kind and the mic/TTS payload frames are binary, in the documented sample formats.",
+          "Confirm no audio frame carries a sequence number and that replaying the chat afterwards returns no audio frames.",
+          "Attempt to open a session whose identifying details do not match the token it presents."
+        ],
+        "expect": "PASS = binary payload frames observed as binary on the wire (not base64 inside a text frame), control frames textual, zero audio events in any replay, and the mismatched session refused. FAIL if audio payloads have become text-encoded, if any audio frame gained a sequence number, if audio shows up in replay, or if a mismatched session is accepted. If the voice path cannot be opened because a genuinely-absent credential or missing local speech component blocks it, report an environmental blocker — do not substitute a fake audio client.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-18",
+        "behaviour": "A client's connect greeting may carry its source commit and build instant, and the server surfaces them for version reporting.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Connect a client that supplies the optional source-commit and build-instant fields, and a second client that omits them entirely.",
+          "Confirm both connections are accepted and neither is rejected for the presence or absence of those fields.",
+          "Find where the server exposes connected-client versions and confirm the supplied commit and build instant are visible there for the first client."
+        ],
+        "expect": "PASS = both clients connect successfully, and the reported commit/build instant for the supplying client match exactly what it sent. FAIL if the fields are mandatory, if supplying them is rejected, if they are accepted but discarded with no way to read them back, or if the value read back is a placeholder/hard-coded string. Finding the fields in a type definition does NOT count — the round trip through the live server must be observed.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-19",
+        "behaviour": "Model is optional at every spawn site and resolves on the machine, including the error when a machine has never read a catalogue.",
+        "surface": "backend",
+        "reviewer": "test-runner",
+        "steps": [
+          "Spawn a chat from a surface naming a machine but no model, on a host that has successfully read a catalogue, and confirm the turn actually runs.",
+          "Determine which model it ran on and confirm it is the machine's last-used/most-recent-catalogue choice rather than a value the surface supplied or a hard-coded constant.",
+          "Spawn a further chat naming an explicit model from that machine's catalogue and confirm the chat runs on it and that the machine's last-used value follows the machine (visible from another surface).",
+          "Attempt a model-less spawn on a machine that has never successfully read a catalogue (e.g. one whose backend credential is not connected)."
+        ],
+        "expect": "PASS = model-less spawns succeed and run on the machine-resolved model at both spawn sites (surface spawn and the agent's cross-chat spawn), last-used tracks the machine not the surface, and the no-catalogue-yet machine refuses a model-less spawn with an error saying exactly that. FAIL if any spawn path requires a model, if the surface's default is what gets used, or if the no-catalogue case silently falls back to a hard-coded model. A chat that is created but never produces a real agent turn does NOT count as a successful spawn.",
+        "status": "pass"
+      },
+      {
+        "id": "A1-20",
+        "behaviour": "The contract ships as runtime validation and types together, and every consuming package builds and decodes against the new host-addressed shapes with no legacy shapes left behind.",
+        "surface": "cli",
+        "reviewer": "test-runner",
+        "steps": [
+          "Build/typecheck the whole workspace from a clean state and run the repo's own test suites for the wire contract and its consumers.",
+          "Search the consuming packages for any remaining decode/producer path using the pre-change, non-host-addressed shapes of the named events — in particular the replaced account-wide credential report and the replaced account-wide connect/disconnect frames.",
+          "Feed the live stack a frame in one of the old, host-less shapes and observe how it is handled.",
+          "Confirm the host identifier is genuinely required (not optional-with-default) in the validation for the events the task lists as breaking changes."
+        ],
+        "expect": "PASS = clean build and green suites with no type errors or skipped packages; no consumer still emits or accepts the superseded account-wide shapes; an old-shape frame is rejected by validation rather than accepted-and-ignored; and the host identifier is required rather than defaulted. FAIL on any build/type error, on a leftover legacy decode path, on an old-shape frame being tolerated, or on the host field being optional with an implicit default. Disabling, skipping or loosening a check to make the build pass does NOT count as a pass — report it as a failure.",
+        "status": "fail"
+      }
+    ]
+  },
+  {
+    "group-id": "A2",
+    "name": "Daemon distributable — artifact, installer, OS service, first run",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [],
+    "tasks": [
+      {
+        "task": "The daemon stops being a container and becomes something a person installs on a machine that has nothing on it but an operating system.\n\nProduce an installable artifact per operating system and architecture — macOS on both architectures and Linux on both — each carrying one bundled program file, a pinned language runtime, the platform's prebuilt native addons (currently only the one the voice-activity model needs), the voice-activity model file itself (~2 MB, the one model weight in the artifact, so end-of-utterance detection and barge-in work on every machine with nothing downloaded), and an installer. The artifact is signed with the project's own signing identity, which is what the self-update path later verifies against. It must install and run on a machine with no toolchain, and it must report its version, its source commit and its build instant.\n\nThere are two ways in. One is a single shell command a person pastes into any machine with a shell. The other is from a surface, which the surface groups own; what this group owes them is an install that works when it is run. First run is self-contained: the installer registers the daemon with the machine's own service manager — launchd on macOS, a user-level systemd unit on Linux — with restart-on-failure and start-at-boot, then asks for the pairing code the user takes from an already-linked surface and submits it with the daemon's public key. The code is minted by the server when a linked surface asks for it, and rendered by that surface; the installer redeems it and mints nothing. Before it registers anything, the installer states once, plainly, what the daemon will be able to do on that machine: it runs as that user, with that user's whole authority.\n\nThe daemon runs as the invoking user under that user's home, so the agent reads that user's own configuration and a chat behaves the way that user's agent behaves in their own terminal. The install writes the command-line skill that ships in the artifact into that user's own agent skills directory, and rewrites it on every self-update, so every chat on the machine can drive the command line and the skill matches the daemon it describes. It survives logout, surface disconnects, and any application on that machine closing. Everything it keeps for itself lives under that user's own patch directory, resolved from that user's home and nothing else: its local control socket, its per-chat state, and, on the account's home machine, the three special threads' working folders. The service unit therefore carries no working directory of its own, and none of these paths is configurable.\n\nRe-running the installer on a machine that is already registered re-uses what is already stored rather than creating a second machine. A machine whose registration has been revoked pairs again from scratch.\n\nWhat must NOT be inside the artifact: the agent backend, the language environment the voice components need, and any model weights large enough to be an optional per-machine download — today the speech synthesiser's and the local transcriber's. Those are provisioned on the machine after install, and carrying them would put multiple gigabytes into every install ahead of any use of voice. The voice-activity model passes that size test rather than failing it — two megabytes, and every machine needs it — so it ships in the artifact as listed above.\n\nProve the claim rather than asserting it: the artifact must be shown installing and running on a bare machine carrying only an operating system.\n\nUnhappy paths: an artifact for the wrong platform refuses rather than half-installing; a service that fails to register says why rather than leaving something that runs once and is gone at reboot; an install on a machine that cannot reach the server still leaves a registered service and says the code could not be submitted, so a fresh code can be entered once the server is reachable; a code the server rejects as expired or already used is reported by the installer as exactly that.",
+        "spec_sections": [
+          "02-daemon.md ## Runtime and installation",
+          "02-daemon.md ### Installation",
+          "02-daemon.md ## Stack",
+          "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+          "11-deployment.md ## Daemon installation",
+          "18-tech-stack.md ### Two shipping shapes",
+          "18-tech-stack.md ## Runtime / packaging",
+          "10-auth.md ## Daemon registration (adding a host)",
+          "10-auth.md ### The authority of a turn"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TA2",
+    "name": "Testing A2 (daemon distributable)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "A3",
+    "name": "Every trigger ingress gated, because a turn carries the machine's authority",
+    "complete": true,
+    "success": true,
+    "dependentOnGroups": [],
+    "tasks": [
+      {
+        "task": "A turn now runs on a real machine with the host user's full authority, including elevated commands where that user has them. Every path by which something outside patch can cause a turn to run is an entry point to that authority, and each must be authenticated or gated by an unguessable secret before anything is dispatched.\n\nAudit and close each one: inbound webhooks and their signature schemes, the calendar push subscription, the task-manager integration, the messaging-bot endpoint with its single allowed sender, and the schedule ticker. Verification happens before any chat is spawned or messaged, never after. A rejected inbound produces no run, is logged as rejected with its reason, and is visible in the inbound log a person can read back. Signature failures, unknown job ids and unexpected senders are rejections, not warnings.\n\nThe daemon's local control socket is owner-only and additionally carries a bearer key that the daemon alone mints, on each start, keeping it beside the socket in its own directory at owner-only permissions. The tool child each query launches is handed the current value in its environment; the command line a person runs on that machine reads it from that file. Same user, same machine remains the real boundary; the key closes the case where some other process on that machine can reach the socket. The tool child is still identified by the environment the daemon set for it, not by the key it presents.\n\nUnhappy paths: an inbound naming a job that does not exist; an inbound whose signature does not verify; a message from a sender who is not the allowed one; a caller of the local socket presenting no key or the wrong one; an inbound arriving faster than it should be accepted. Each is refused with nothing dispatched, and each leaves an audit line.",
+        "spec_sections": [
+          "10-auth.md ### The authority of a turn",
+          "10-auth.md ## What's trusted vs untrusted",
+          "10-auth.md ## Tokens on the wire",
+          "08-triggers-and-jobs.md ### Webhook",
+          "08-triggers-and-jobs.md ## Execution model",
+          "08-triggers-and-jobs.md ## Logs",
+          "06-threads-manager-telegram-speakers.md ## Telegram thread",
+          "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+          "02-daemon.md ## MCP server",
+          "01-server.md ## Responsibilities"
+        ],
+        "complete": true
+      }
+    ]
+  },
+  {
+    "group-id": "TA3",
+    "name": "Testing A3 (trigger ingress authority)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A3"],
+    "tasks": ["test-runner", "security-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "B1",
+    "name": "Server — a relay for any number of machines",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "A2"],
+    "tasks": [
+      {
+        "task": "The server holds exactly one daemon socket today and closes the older one when a second attaches. It must become a relay for any number of machines, all of them peers.\n\nThe registry keeps a record per machine — its id, its user-editable name, its platform, its version and its last-seen state — and any number may be registered. A daemon dials in and authenticates as itself; a second, third and fourth attach alongside rather than displacing each other, each holding its own live link.\n\nEvery chat records the machine it belongs to, and the server routes that chat's events to that machine alone. A surface event for a chat goes to that chat's machine; an event from a machine fans out to the account's surfaces carrying the machine it came from. Presence is tracked and published per machine, so one machine going away says nothing about the others.\n\nEverything the server buffers is partitioned per machine: surface input for an offline machine, and payloads produced by fired triggers, are held against that machine and flushed when that machine reconnects, bounded exactly as they are today. When a machine's link drops, only that machine's in-flight chats resolve to a visible error naming it; chats on other machines are untouched.\n\nThe server caches each machine's last self-description and its last per-backend account report and replays them, along with every machine's presence, in the greeting it sends a surface on connect — so a surface that connects after a machine dropped shows it as offline immediately, with no window in which the app claims everything is fine.\n\nThe routes that were single-daemon become machine-addressed: the link-liveness check answers for one named machine or returns a per-machine list, reporting healthy while any machine is up and unhealthy only when every one is down; the model catalogue and the folder-skill lookup are round-tripped to the named machine; chat creation carries the machine alongside the folder and an optional model.\n\nRenaming a machine and marking a machine as the account's home machine are server-side operations that take effect for every surface.\n\nRegistration has one direction and this group owns its minting end: the server mints a single-use registration code when a linked surface asks for one, and redeems it when a daemon submits it with its public key, answering with that machine's own key and recording its self-description. Surfaces render that code and installers redeem it; neither mints one. A daemon submitting from a machine that is already registered gets its existing key back rather than a second machine.\n\nA real daemon attaches to this server in its tests, which is what registration redeeming, per-machine routing and per-machine buffering are proved against. The claims that need a second machine attached at the same time are proved on the two-daemon rig (C1), where a second real machine identity first exists (18-tech-stack.md ## Testing).\n\nUnhappy paths: a frame naming a machine that is not registered; a chat whose machine has been removed; two links claiming the same machine identity; a route called with no machine where the answer would be ambiguous. Each is a named error, never a silent pick of whichever machine happens to be attached.",
+        "spec_sections": [
+          "01-server.md ## Responsibilities",
+          "01-server.md ## Endpoints",
+          "01-server.md ## Stack",
+          "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+          "03-wire-protocol.md ### Host events",
+          "03-wire-protocol.md ### Control (anywhere ↔ server)",
+          "04-chats-and-folders.md ## chat_state (live)",
+          "12-error-and-offline.md ### Host → server disconnect",
+          "12-error-and-offline.md ### Hosts fail independently",
+          "12-error-and-offline.md ### Guaranteed input delivery (surface → daemon)",
+          "12-error-and-offline.md ### Webhook arrives while a host is down",
+          "12-error-and-offline.md ### Cron fires while a host is down",
+          "10-auth.md ## Daemon registration (adding a host)",
+          "10-auth.md ## Revocation",
+          "18-tech-stack.md ## Storage"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TB1",
+    "name": "Testing B1 (server multi-host relay)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "B2",
+    "name": "Server — daemon distribution, and the install command a surface shows",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "A2"],
+    "tasks": [
+      {
+        "task": "The server becomes the place machines get their daemon from.\n\nIt serves the current artifact for each operating system and architecture together with a version manifest saying what the current build is. That one channel feeds two consumers: a brand-new machine's install, and every existing machine's self-update. Publishing a new build is what makes both see it.\n\nThe server is also the single source of the one-line install command a surface offers when the user adds a machine. A surface must NOT compose that command out of its own guesses about the server's address or the artifact's name: the server produces it, per target operating system, from the same manifest it serves the artifacts from, so the command a phone shows and the command the desktop shows are the same command and both point at the running server. Make that a first-class thing a surface retrieves by naming its target operating system, so a surface renders what the server hands back without knowing how a build is named.\n\nServer and daemon versions move independently, and the event protocol is the compatibility contract between them: the server states the daemon version range it supports, and a machine outside that range is reported as needing an update rather than left to misbehave quietly.\n\nUnhappy paths: an artifact requested for a platform that has no build; a manifest read while a publish is only half finished; a machine reporting a version the server does not support; a request for the install command before anything has been published. Each answers plainly rather than handing back something unusable.",
+        "spec_sections": [
+          "01-server.md ## Responsibilities",
+          "01-server.md ## Endpoints",
+          "02-daemon.md ## Runtime and installation",
+          "02-daemon.md ### Installation",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Deploy guide",
+          "11-deployment.md ## Version reporting",
+          "14-design-web.md ### `/settings` details"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TB2",
+    "name": "Testing B2 (daemon distribution and install command)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C1",
+    "name": "Daemon — which machine am I, and the two-daemon test rig",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "A2", "B1"],
+    "tasks": [
+      {
+        "task": "Each daemon must know and publish what machine it is, and stop behaving as though it lives in a container.\n\nIt has a stable machine id issued at registration and a name defaulted from the machine's own hostname and editable from any surface. It sends the self-description the wire contract defines on connect and again whenever anything in it changes, filling the fields it answers for itself: its name, its platform and architecture, its own version, and whether it is the account's home machine. Surfaces label it by that name rather than by its id.\n\nIt stops assuming a mounted filesystem and a container identity. It owns its own folder registry — the project roots the user designates plus folders seen in that machine's recent chats, filtered so that only real project folders are published and dot-directories and system scratch directories never are, while an explicitly designated root is always shown — and publishes that registry as its own, with its machine id on both the snapshot and every change push. Designating a root and dropping one are things it ACCEPTS rather than only reports: it takes the contract's add and remove frames from a surface and the matching endpoints on its own local socket, validates the path against its own filesystem, writes its registry and answers with the change push, so a graphical surface and the command line edit the same list by the same route.\n\nEvery host-scoped control the contract lets a surface change is also reachable on this machine's own local socket, one endpoint per frame and one implementation behind both, because the command line's default machine is the one it is invoked on and those commands must work there without a round trip through the server. That is the standing rule for this daemon: a host-scoped control the contract gains arrives with its socket endpoint in the same change. The one endpoint with no frame behind it is opening the five-minute voice-device adoption window, which is local-only because the daemon adopts the device itself. It answers directory-listing requests for its own tree, confined to its designated roots and refusing traversal out of them, fast enough that a picker feels instant. A folder path means nothing without the machine it is on: the same string on two machines is two different directories, and whether a folder exists is checked on the machine that will actually run the chat.\n\nThe shell it opens for a surface runs on it, in the folder asked for or — when none is named, which is a different and explicit request — in the first of its own project roots that exists, reporting back the directory it really started in. It uses the user's own version-control identity and configuration because it runs as that user, and it refuses to sit waiting on a credential prompt it has no terminal to answer.\n\nBuild the rig this whole change is proved on: one server with two real daemon processes attached at once, each with its own machine identity and its own home directory on the test machine, so per-machine routing, presence and buffering are exercised against real daemons rather than stand-ins (18-tech-stack.md ## Testing). The multi-machine claims the server makes are proved here, because this is the first point at which two real machines exist: a chat's events reach only its own machine, a surface event for a chat on the second machine never lands on the first, and input for an offline machine is held and later flushed to that machine alone. Every later group's tests build on this rig, so it must be usable by them.\n\nUnhappy paths: a daemon started with no registration; a daemon whose stored registration has been revoked; two daemons started from the same home directory; a directory request naming a path outside that machine's roots; a shell opened against a folder that does not exist on that machine; a root designated at a path that machine does not have; a root removed that was never designated. Each names the problem rather than falling through to somewhere that happens to work. The server owns minting a registration code, renaming a host, marking one the home host and revoking one, so those four go over HTTP even when the command is invoked on that machine (02-daemon.md ## Control IPC, 17-cli.md ## Hosts and the CLI).",
+        "spec_sections": [
+          "02-daemon.md ## Host identity",
+          "02-daemon.md ## Responsibilities",
+          "02-daemon.md ## Stack",
+          "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+          "02-daemon.md ## Terminal sessions",
+          "02-daemon.md ## Daemon restart behaviour",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "04-chats-and-folders.md ### Browsing (directory listing)",
+          "04-chats-and-folders.md ## Spawn",
+          "03-wire-protocol.md ### Host events",
+          "03-wire-protocol.md ### Terminal sessions (surface ↔ daemon)",
+          "18-tech-stack.md ## Testing",
+          "18-tech-stack.md ## Storage"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC1",
+    "name": "Testing C1 (daemon machine identity and two-daemon rig)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C2",
+    "name": "Daemon — agent backends, per-machine credentials, and how a chat gets its model",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "C1"],
+    "tasks": [
+      {
+        "task": "The daemon stops being wired directly to one agent and gains a backend concept.\n\nA backend supplies four things: the models it can run, the credential those models authenticate with, the permission modes it accepts, and the transcript store it persists sessions to. The daemon reports the backends a machine has, and a chat's model selects the backend that runs it. The backend that exists is driven in-process against the machine's OWN installation of that agent rather than a bundled copy, so a turn runs on the same program, version and configuration the user gets in their own terminal, and the resolved location and version are reported for that machine.\n\nThe daemon provisions a backend the machine lacks rather than reporting it as missing. Present and usable: resolve it and report where it is and what version it is. Absent: install it through that backend's own installer, reporting progress to surfaces on the contract's component-progress channel. Present but logged out: report itself unauthenticated naming that backend, so settings can offer that backend's routes to a credential. A failed install is reported and turns for that backend are held until it is resolved, and it must not leave the machine looking provisioned. Backends are independent: a machine with one backend unprovisioned keeps running chats on the others.\n\nBackend credentials are per machine and live on the machine that runs the turns. Each machine reports an account state per backend, and connecting, switching and disconnecting each act on one backend on one machine. The daemon accepts all three over the contract's per-machine, per-backend credential frames from a surface and over the matching endpoints on its own local socket, so the app and the command line drive one implementation. The existing credential rules stand and must not regress: the daemon's own store is authoritative after first boot, seeded once from the environment, then the backend's own credentials file, then the platform keystore, in that order; disconnecting empties that store without deleting it and without touching the backend's own credential; connecting either takes a pasted token or re-adopts whatever the backend already has on that machine; no surface ever holds a model key, and a raw model key is stripped from the environment a turn runs in.\n\nUnhappy paths: a chat whose model belongs to a backend this machine has not provisioned, which cannot run and says exactly that; a credential operation aimed at a backend the machine does not have; a credential operation aimed at an offline machine, refused up front naming it rather than buffered to take effect minutes later; an install that fails.",
+        "spec_sections": [
+          "02-daemon.md ## Agent backends",
+          "02-daemon.md ## Stack",
+          "10-auth.md ## Identity layers",
+          "10-auth.md ## Backend credentials",
+          "18-tech-stack.md ## Daemon",
+          "principles.md ## What we don't do",
+          "00-overview.md ## Permission model"
+        ]
+      },
+      {
+        "task": "Which model a chat runs on is resolved on the machine that will run it, not by whoever asked. Nothing owns this today, and every spawn site depends on it, so it is defined once here.\n\n- A model named at spawn is fixed for that chat's life and selects the backend that runs it.\n- A spawn may OMIT the model, and omitting it must work. The chat then runs on its machine's last-used model.\n- A machine RECORDS the model of each chat spawned on it, so the last-used value follows the machine rather than the surface that asked. Two chats started from different surfaces move the same per-machine value.\n- A machine that has never run a chat still has a last-used model: it takes one from the FIRST catalogue it reads successfully, the newest entry of that catalogue, so a freshly added machine runs its first chat without anybody choosing a model on it. That read needs a working credential, so a machine whose backend is provisioned but logged out has none until the credential is connected, and gets one as soon as it is.\n- The machine REPORTS its last-used model in its self-description, absent while it has none, so surfaces can preselect it and agents can read it without guessing.\n- The only case where a spawn naming no model is an error is a machine that has never successfully read a catalogue, and the error says exactly that rather than inventing a model.\n\nThe catalogue itself is read from each provisioned backend's own provider rather than hard-coded, cached per backend for its existing lifetime, and returned newest-first with each entry naming the backend that serves it. A missing or expired credential, or a bad response from one provider, is returned as an error against THAT backend while the models from backends that answered stay selectable. A catalogue already read is served for its lifetime even when a later refresh fails — caching a real read is not a fallback, inventing one is.\n\nUnhappy paths: a spawn naming a model no provisioned backend offers; a catalogue read that fails on every backend; a machine whose only backend is logged out; two spawns racing on the same machine, which must leave one coherent last-used value rather than a torn one.",
+        "spec_sections": [
+          "02-daemon.md ## Model catalogue",
+          "02-daemon.md ## Agent backends",
+          "02-daemon.md ## Host identity",
+          "04-chats-and-folders.md ## Spawn",
+          "03-wire-protocol.md ### Host events",
+          "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+          "03-wire-protocol.md ### Cross-chat tools",
+          "08-triggers-and-jobs.md ## Action",
+          "06-threads-manager-telegram-speakers.md ## Cross-chat toolset"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC2",
+    "name": "Testing C2 (agent backends and model resolution)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C3",
+    "name": "Daemon — permission mode as a setting at two scopes",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "C2"],
+    "tasks": [
+      {
+        "task": "Turns still run without prompting by default — surfaces are remote and frequently asleep, and a prompt raised at three in the morning stalls everything that runs unattended — but the mode stops being a constant and becomes a setting the user controls at two scopes.\n\nThe effective mode resolves per turn: the chat's own override first, then its machine's default, then the no-prompting default. Both scopes are settable from any surface. The modes offered are the ones the chat's backend accepts, taken as that backend defines them rather than re-invented, so a machine whose backends differ offers different sets.\n\nThe daemon carries the effective mode on chat state so a surface can show the mode the NEXT turn will actually use, and it reports its own default plus how many of its chats carry an override in its self-description. Clearing a chat's override returns it to its machine's default, and the difference between \"overridden to the same value the machine uses\" and \"not overridden\" must survive a daemon restart.\n\nA change takes effect on the next turn, not on the one already running.\n\nUnhappy paths: a mode outside the set the backend accepts; a machine-default change aimed at an offline machine; a per-chat override on a chat whose backend is not provisioned; a chat whose stored override names a mode its backend no longer accepts.",
+        "spec_sections": [
+          "02-daemon.md ## Permission mode",
+          "00-overview.md ## Permission model",
+          "03-wire-protocol.md ### Host events",
+          "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+          "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+          "04-chats-and-folders.md ## Spawn",
+          "principles.md ## What we don't do"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC3",
+    "name": "Testing C3 (permission mode)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C3"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C4",
+    "name": "Daemon — optional components, per machine, driven from the app",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "C1"],
+    "tasks": [
+      {
+        "task": "The large voice models stop shipping with anything and become per-machine downloads driven from the app.\n\nEach machine advertises which optional components it has, each with its size and its state — not installed, downloading, installed, failed — plus progress and an error while those apply. Downloads are started and removed from a surface, against a named machine.\n\nProgress streams live to every connected surface, so a download started from one surface is visible on the others, and the settled result lands on the machine's self-description rather than on the live progress stream, which is transient and never replayed. An interrupted download resumes rather than starting again, and a component counts as installed only once its size and digest verify.\n\nThe language environment those components need is created on the machine at that point rather than shipped in the artifact. The optional list holds the weights too large to put in every install — the speech synthesiser's and the local transcriber's. The small voice-activity model is not on that list: it is inside the daemon artifact already (A2), so everything depending on it works on every machine with nothing downloaded. A machine configured for remote speech-to-text installs nothing for it at all.\n\nA machine that has the speech component installed warms it at boot so the first spoken reply does not pay the model load.\n\nUnhappy paths: a component operation naming a component that machine does not offer; a download that runs out of disk; a digest that does not verify, which must NOT be marked installed; a remove while a session is using that component; any component operation aimed at an offline machine.",
+        "spec_sections": [
+          "02-daemon.md ## Optional components (large models)",
+          "02-daemon.md ## Host identity",
+          "03-wire-protocol.md ### Host events",
+          "07-voice-app.md ### Production backends",
+          "07-voice-app.md ### Latency",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Env",
+          "18-tech-stack.md ## Daemon"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC4",
+    "name": "Testing C4 (optional components)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C4"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C5",
+    "name": "Daemon — self-update under the service manager",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A2", "B2", "C1"],
+    "tasks": [
+      {
+        "task": "A machine keeps its daemon current without anybody logging into it.\n\nThe daemon checks the server for a newer build when it boots and again on a schedule, downloads it, verifies it carries the project's signing identity, and restarts itself under the machine's own service manager. It also applies an update on demand when a surface asks it to, so a user who sees a stale machine can act on it.\n\nA machine behind the current build says so in its self-description, which is what lets surfaces offer the control at all. A failed update leaves the running version in place and reports the failure to surfaces, rather than leaving a machine with nothing running on it.\n\nUnhappy paths: a download that fails part-way; an artifact whose signature does not verify, which is refused rather than installed; a service manager that refuses the restart; an update check made while the server is unreachable, which is not an error state for the machine, just no update this time; an update asked for on a machine that is already current.",
+        "spec_sections": [
+          "02-daemon.md ## Runtime and installation",
+          "02-daemon.md ## Self-upgrade",
+          "02-daemon.md ## Host identity",
+          "03-wire-protocol.md ### Host events",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Deploy guide",
+          "01-server.md ## Responsibilities"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC5",
+    "name": "Testing C5 (daemon self-update)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C5"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "D1",
+    "name": "Jobs and triggers addressed to a machine",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "A3", "B1", "C2", "D2"],
+    "tasks": [
+      {
+        "task": "A job now says which machine its work happens on.\n\nA folder-addressed action — spawning a fresh chat each fire, or ensuring one persistent chat exists — carries the machine as part of its address and stores it with the job, so the job fires on the machine it was written for however long later. It may also carry a model; a spawn carrying none has its model resolved on the machine it fires at. An action that messages an existing chat takes both machine and model from the chat it delivers into.\n\nA folder-addressed action carries both the machine and the folder, and both are required: there is no machine-wide directory a job falls back to, so an action saved without either is rejected at the API rather than resolved to a guess.\n\nFiring at an offline machine writes the action to that machine's own pending queue and flushes it when that machine reconnects, bounded as before, and the run log names the machine and shows the run as pending. A backlog belongs to one machine and does not touch another.\n\nEverything that reads or writes a job carries the machine with it: the stored definition, the run log entry, the editor's data, and the tools an agent uses to create and edit jobs. An action that names a folder without the machine it is on is refused rather than sent to whichever machine happens to be attached; an action that names a machine without a folder on it is refused the same way. A caller that does not know which machine to name discovers one first from the machine list it already has a tool for, so no job is ever created against an address nobody chose.\n\nUnhappy paths: a job naming a machine that has been removed; a job whose folder does not exist on the machine it names, which is a loud failure recorded against that run rather than a silent skip; a message action whose chat lives on a machine that is gone; a filter that passes but an action that cannot be addressed; an action saved with no folder, refused at the API and at every editor; several fires stacking up for one offline machine, which arrive as a backlog rather than as lost work.",
+        "spec_sections": [
+          "08-triggers-and-jobs.md ## Job shape",
+          "08-triggers-and-jobs.md ## Action",
+          "08-triggers-and-jobs.md ## Logs",
+          "08-triggers-and-jobs.md ## CRUD",
+          "08-triggers-and-jobs.md ## Execution model",
+          "01-server.md ## Responsibilities",
+          "03-wire-protocol.md ### Job-trigger events",
+          "12-error-and-offline.md ### Cron fires while a host is down",
+          "12-error-and-offline.md ### Webhook arrives while a host is down",
+          "06-threads-manager-telegram-speakers.md ## Cross-chat toolset"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TD1",
+    "name": "Testing D1 (jobs addressed to a machine)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["D1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "D2",
+    "name": "Cross-machine addressing — relay a call to another machine, and let an agent find machines",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "C1", "C2"],
+    "tasks": [
+      {
+        "task": "A cross-chat call may name a chat on a different machine from the one the calling agent is running on, and the system must carry it there and bring the answer back inside the turn.\n\nA call whose target is on the calling chat's own machine is executed in place, as now. One naming another machine is relayed by the server to that machine and its response relayed back to the caller. Surfaces see the call either way, so cross-chat activity reads as an audit trail regardless of which machines were involved.\n\nA call naming an offline machine returns an error to the calling agent naming that machine, within the turn. A tool result is part of a turn in progress, so it resolves rather than buffering the way a user's message does, and the agent decides what to do about the machine being down.",
+        "spec_sections": [
+          "03-wire-protocol.md ### Cross-chat tools",
+          "01-server.md ## Responsibilities",
+          "02-daemon.md ## Responsibilities",
+          "06-threads-manager-telegram-speakers.md ## Cross-chat toolset",
+          "12-error-and-offline.md ### Hosts fail independently"
+        ]
+      },
+      {
+        "task": "An agent must be able to resolve a machine the user names in words — \"the laptop\", \"the always-on box\" — to the identity that spawning a chat and creating a job both require. Nothing gives it that today, and a machine with no chats on it yet is invisible to every listing an agent has.\n\nGive every chat's agent a way to list every registered machine, each with its id, its name, whether it is online, whether it is the account's home machine, and its last-used model. That listing is how an agent turns a human word into an address, so it must include a machine that has never run anything.\n\nThe chat-listing call likewise carries each chat's machine, so a folder path is never ambiguous between two of them. The voice-device listing is scoped the same way, and it is built by the voice group (H1) with the per-machine device register it reads.\n\nSpawning from an agent names the machine and may name a model or leave it out; left out, the new chat's model is resolved on that machine.\n\nUnhappy paths: a call naming a chat that exists on no machine; a call naming an offline machine; a call naming a machine that has been removed; a spawn naming a folder that does not exist on the machine named; a relayed call whose target machine drops mid-call, which must resolve as an error inside the turn rather than hang it.",
+        "spec_sections": [
+          "06-threads-manager-telegram-speakers.md ## Cross-chat toolset",
+          "06-threads-manager-telegram-speakers.md ### Disambiguation: `Task` vs `patch_spawn` vs `patch_send_to`",
+          "03-wire-protocol.md ### Cross-chat tools",
+          "02-daemon.md ## MCP server",
+          "04-chats-and-folders.md ## Spawn",
+          "17-cli.md ## Scope"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TD2",
+    "name": "Testing D2 (cross-machine relay and machine discovery)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["D2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "D3",
+    "name": "The home machine, the special threads, and what removing a machine means",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1", "C1", "D2"],
+    "tasks": [
+      {
+        "task": "The three singleton threads — the manager, the messaging-bot mirror and the speakers transcript — live on exactly one nominated machine, and which machine that is must be settable. Nobody owns changing it today.\n\nThe account has one home machine. It is set when the first machine registers, and changed from any surface's settings through a request naming the new one. Exactly one machine carries the marker; setting it on another moves it. Changing it creates the three thread folders and their empty, user-owned guidance files on the new machine and leaves the previous machine's transcripts readable where they are — nothing is migrated and nothing is deleted. The threads cannot exist on two machines at once, and a machine that is not the home machine does not create the thread folders.\n\nThe three thread folders are manager, telegram and speakers under a threads directory inside the daemon's own state directory, in the home directory of the user that daemon runs as, beside the per-chat state, credentials and local socket it already keeps there. They resolve from that user's home and nothing else, so a service the operating system starts at boot lands on the same three paths every time and no group has to decide what working directory the service unit carries. What a thread inherits is that user's own agent configuration, which the daemon already runs under, plus the command-line skill the installer writes there; anything beyond that goes in the thread's own guidance file. Inbound bot messages route to the home machine.\n\nBecause delivery is spread across machines and the threads that make sense of a reply are not on all of them, this group also moves the broadcast records off any machine's disk and onto the server, and owns both ends of that: the server appends a record as it routes an announcement on a channel one of these threads mediates, and the home machine's daemon reads the pending records when the user replies, injects them into that turn's prompt, and clears only the ones that turn consumed. Nothing is written by one machine for another machine to read. A record that arrives while the home machine is offline, or while it is mid-turn, is still there for the next reply, and pending records follow the threads when the home machine changes.\n\nWhile the home machine is offline the three threads are unavailable and every surface says so plainly, rather than showing them as ordinary idle chats with a composer that appears to work.\n\nRemoving a machine is confirmed and names how many chats live on it; its registration is invalidated, its link dropped, its chats unreachable while their history stays on that machine, and every other machine carries on unaffected. Because exactly one machine carries the home marker, this group also DEFINES, once, what removing the home machine does to that marker, so no surface invents its own answer. It must not be possible, through any surface, to end up with a registered account and no home machine.\n\nUnhappy paths: changing the home machine to one that is offline or unregistered, refused and naming it; a home-machine change while a thread is mid-turn, which must not lose that turn's transcript; an inbound bot message or a speaker announcement arriving while the home machine is offline, where the announcement is still recorded and reaches the thread's next reply; a reply whose agent invocation fails, which must leave the records pending rather than consuming them; removing the machine that is currently the home machine.",
+        "spec_sections": [
+          "06-threads-manager-telegram-speakers.md ## Where special threads run",
+          "06-threads-manager-telegram-speakers.md ## What they share",
+          "06-threads-manager-telegram-speakers.md ## Telegram thread",
+          "06-threads-manager-telegram-speakers.md ## Speakers thread",
+          "03-wire-protocol.md ### Host events",
+          "09-notifications.md ## Broadcast context",
+          "09-notifications.md ### `speakers`",
+          "10-auth.md ## Revocation",
+          "12-error-and-offline.md ### Hosts fail independently",
+          "08-triggers-and-jobs.md ## Action",
+          "14-design-web.md ### `/settings` details",
+          "18-tech-stack.md ## Storage",
+          "09-notifications.md ### The broadcast log",
+          "01-server.md ## Endpoints",
+          "01-server.md ## Responsibilities"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TD3",
+    "name": "Testing D3 (home machine and special threads)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["D3"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "E1",
+    "name": "Web — Settings, Hosts, and adding a machine",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "B2", "C1", "C2", "C3", "C4", "C5", "D3"],
+    "tasks": [
+      {
+        "task": "Settings gains the place where machines are watched and managed, replacing today's single-daemon section.\n\nOne row per machine. A row shows its name, editable in place; whether it is online or offline with its last heartbeat, stated exactly once; its platform; its daemon version with an update control when one is available; and its agent backends, each carrying that backend's version and its account state, or the controls to connect, switch and disconnect that one backend on that one machine.\n\nExpanding a row gives that machine's permission-mode default, chosen from the modes its backends accept, alongside how many of its chats carry a per-chat override; its optional components, each with size, state and install and remove controls, showing live progress while a download runs; its project folders, with add and remove controls that write through to that machine and settle on its next registry push rather than on the click; the control that marks it the account's home machine; and the control that removes it, confirmed and naming its chat count.\n\nState comes from the live reports, with a quiet loading state before a machine's first report arrives and a plainly reported failure rather than a control that looks like it worked. Pending states resolve on the next report, not on a matching value, and a report that says the opposite of what was asked surfaces as an error rather than silently sticking.\n\nThe section obeys the app's existing rules without exception: no explanatory prose under any control, a switch for a boolean with a label that does not flip, icon-only controls carrying a short hover name, the shared close and delete glyphs at their shared size, and no text below the minimum size.\n\nUnhappy paths: a rename to an empty name; a project root added at a path that machine does not have, reported as that; a component, permission, credential or folder action aimed at an offline machine, refused up front naming it rather than appearing to work and taking effect minutes later; a machine whose first report has not arrived; an update control on a machine that is already current; removing the machine that is currently the home machine, which follows the one rule defined for that case.",
+        "spec_sections": [
+          "14-design-web.md ### `/settings` details",
+          "14-design-web.md ## Routes",
+          "14-design-web.md ### Copy — no helper text",
+          "14-design-web.md ### Icons",
+          "14-design-web.md ## Visual system",
+          "02-daemon.md ## Host identity",
+          "02-daemon.md ## Optional components (large models)",
+          "02-daemon.md ## Permission mode",
+          "10-auth.md ## Backend credentials",
+          "10-auth.md ## Revocation",
+          "00-overview.md ## Permission model"
+        ]
+      },
+      {
+        "task": "Above the machine list sits the way a new machine is added.\n\nAdding a machine asks the server for a single-use registration code and renders it both scannably and typeably — the same code either way, because some machines are reached by typing rather than by pointing a camera — together with the one-line install command for the target operating system. The installer on the machine being added is what redeems that code, so this screen mints nothing and resolves when that machine registers. The install command likewise comes from the server, which is its single source; the surface renders what the server gives it and never composes it from its own idea of the server's address or of how a build is named.\n\nThe pairing screen must not confuse the two values a person can arrive with: the short code from Link a device, which this browser redeems for its own credential, and the credential token from the command line's bootstrap, which is the first sign-in of an account with no linked surface yet. It names both, and rejects the registration code from Add host up front, since that one authorises a machine rather than a sign-in.\n\nUnhappy paths: a registration code that expires unused; a registration that never completes; a request for the install command before the server has published anything; an install command shown for an operating system the server has no build for; the same machine paired twice, which must resolve to one machine rather than two.",
+        "spec_sections": [
+          "14-design-web.md ### `/settings` details",
+          "14-design-web.md ## Pairing screen",
+          "02-daemon.md ### Installation",
+          "02-daemon.md ### Desktop app and the local daemon",
+          "10-auth.md ## Daemon registration (adding a host)",
+          "10-auth.md ## Surface linking (QR flow)",
+          "05-surfaces.md ### Canonical QR payload",
+          "01-server.md ## Endpoints"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TE1",
+    "name": "Testing E1 (web hosts settings)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["E1"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "E2",
+    "name": "Web — chats that know which machine they are on",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "C2", "C3", "D1", "D2", "D3", "E1"],
+    "tasks": [
+      {
+        "task": "Starting a chat now means choosing a machine and a folder on it.\n\nThe folder picker is one list grouped by machine: under each machine's name, that machine's configured project folders first, then folders seen in recent chats on it, then a clearly secondary field for an ad-hoc path on that machine, plus a browse tree that reads that machine's own directories with a breadcrumb once the user has drilled in. Picking a folder picks the machine, and that pair is what the spawn carries; it is fixed for the chat's life. The picker defaults to the last used machine-and-folder pair, a machine added later appears as soon as it registers, and an offline machine's group renders greyed with choosing from it reporting that it is offline rather than spawning.\n\nThe browsed filesystem is ALWAYS the selected machine's, never the filesystem of the machine this surface runs on, because a locally picked path is a path the chosen machine does not have.\n\nThe model picker sits beside the folder pill, in the same shape of control, in the new-chat setup row rather than the header. It loads the chosen machine's catalogue and offers it newest-first, preselecting the draft's model, else that machine's last-used. A backend that failed to answer shows its error in the picker while the models from backends that did answer stay selectable, and the chat can still be spawned while the catalogue is unavailable. The model is chosen before the first message and fixed after it; changing the chosen machine re-reads the catalogue for the new one. Only one of the two pop-ups is open at a time and both dismiss on a click outside and on escape.\n\nUnhappy paths: a folder that exists on one machine and not on another; an ad-hoc path that turns out not to exist, which surfaces the machine's own error on send and keeps the typed message; a catalogue that fails to load on every backend; a machine chosen and then removed before the first message; a spawn attempted on an offline machine.\n\nThe new-chat chords resolve the same pair: the plain chord starts a chat on the current or most-recently-used machine and folder without opening the picker, and the shifted chord opens the picker (14-design-web.md ## Keyboard shortcuts).",
+        "spec_sections": [
+          "14-design-web.md ## Sidebar",
+          "14-design-web.md ### Copy — no helper text",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "04-chats-and-folders.md ### Browsing (directory listing)",
+          "04-chats-and-folders.md ## Spawn",
+          "02-daemon.md ## Model catalogue",
+          "01-server.md ## Endpoints",
+          "12-error-and-offline.md ### Host-offline UX",
+          "14-design-web.md ## Keyboard shortcuts"
+        ]
+      },
+      {
+        "task": "The rest of the web app learns that chats live on different machines.\n\nChats group by machine and folder, so the same path on two machines stays two groups. A machine being unreachable is a first-class, explained state scoped to that machine's chats: the banner names it, says messages will be queued and sent when it reconnects, links through to that machine's settings row, and becomes app-level only when every machine is offline. Navigation stays fully available and the composer stays usable and queues, while spawning a new chat on an offline machine is refused up front because its folder cannot be checked. Only the controls that genuinely cannot be queued are visibly disabled, with the machine named.\n\nThe connection state model keeps two independent indicators — the link to the server, and presence per machine — and a chat's indicator reflects its own machine's presence. There is no offline flash on load: an unknown machine reads as quiet, not as broken. The diagnostics screen reports one line per registered machine, so a machine being down reads differently from the server being down and from a rejected credential.\n\nEverything that touches files resolves against the chat's own machine: the diff editor, the file browser and its project-wide jump, and the saves they write. The terminal drawer opens a shell on the chat's machine, and on a not-yet-created chat opens on the machine chosen in the picker, showing the directory the machine reports it actually started in. The skill autocomplete asks the chat's own machine for that folder's skills. The batch view spans machines, each member row carrying its own, and a member whose machine is offline shows that rather than blocking the batch. While the home machine is offline the three special threads read as unavailable rather than as ordinary idle chats.\n\nUnhappy paths: a chat whose machine has been removed; an editor save while the chat's machine is offline; a terminal opened on an offline machine; a queued message that must flush to its own machine and no other; a machine reconnecting while its banner is on screen.\n\nThe chat's Tools panel carries that chat's permission mode: the effective mode the next turn will use, and a picker offering the modes the chat's backend accepts. Choosing one sets the per-chat override through the per-chat settings frame; a Use host default option clears it by sending that frame with the field omitted (14-design-web.md ## Tools panel).",
+        "spec_sections": [
+          "14-design-web.md ## Main chat panel",
+          "14-design-web.md ## Terminal",
+          "14-design-web.md ## Editor — two surfaces",
+          "14-design-web.md ### Batch mode",
+          "14-design-web.md ## Offline / error states",
+          "14-design-web.md ## Chat panel header",
+          "12-error-and-offline.md ### Surface connection state model",
+          "12-error-and-offline.md ### Hosts fail independently",
+          "12-error-and-offline.md ### Host-offline UX",
+          "12-error-and-offline.md ### Connection diagnostics screen",
+          "12-error-and-offline.md ### Guaranteed input delivery (surface → daemon)",
+          "05-surfaces.md ## Web app",
+          "02-daemon.md ## Terminal sessions",
+          "01-server.md ## Endpoints",
+          "14-design-web.md ## Tools panel"
+        ]
+      },
+      {
+        "task": "The Schedules screens name the machine each job runs on.\n\nA spawn or ensure action picks its folder with the same machine-grouped picker the new-chat flow uses: under each machine's name, that machine's configured project folders first, then folders seen in existing chats on it, plus an ad-hoc path field for that machine. Picking a folder picks the machine, and that pair is what the action stores. A new job seeds the folder to the most-recently-used machine-and-folder pair, the same seed the new-chat picker uses, and to nothing at all when there is no such pair; a spawn or ensure action left with no folder or no machine is blocked in the client with a message that says so, matching the API's own rule. A message action takes its machine from the recipient chat.\n\nThe Skill dropdown is fetched for the action's target machine and folder, and an already-saved skill stays selectable while that list is loading or after it fails.\n\nThe job list and the runs panel name the machine each action addresses, so the same path on two machines reads as two jobs, and a fire waiting on an offline machine reads as pending against that machine.\n\nUnhappy paths: a job whose machine has been removed, which still opens and edits rather than breaking the page; a machine that goes offline between picking its folder and saving; a skill list that fails to load for the chosen machine; a saved job whose stored folder no longer exists on the machine it names.",
+        "spec_sections": [
+          "14-design-web.md ## Schedules view",
+          "14-design-web.md ## Routes",
+          "08-triggers-and-jobs.md ## Action",
+          "08-triggers-and-jobs.md ## CRUD",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "01-server.md ## Endpoints"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TE2",
+    "name": "Testing E2 (web machine-aware chat UX)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["E2"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "E3",
+    "name": "Desktop — make this Mac a machine, and sign what ships",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A2", "C5", "E1", "E2"],
+    "tasks": [
+      {
+        "task": "The desktop app is a surface that can also turn the machine it runs on into a host.\n\nIt offers to run a daemon here, installs it as an ordinary operating-system service with its own lifetime, shows that machine's status alongside every other machine's, and can restart it. Being linked already, it asks the server for the registration code itself and hands it to the daemon it just installed, so nobody types a code into the machine they are sitting at. The daemon it installs is not a child of the app: closing the app leaves it running, exactly as any other machine's daemon runs without a surface attached.\n\nBeing a host changes nothing about the app's role as a surface. It still browses the SELECTED machine's filesystem through the same in-app tree the browser app uses — never an operating-system directory dialog — even when the selected machine happens to be the one it is running on.\n\nThe shell is signed with the project's own signing identity rather than a vendor developer identity; notarisation stays off and builds are installed by direct copy so nothing is quarantined. Signing is what makes the shell's own update path work at all, and a publish refuses to proceed when the identity is missing or the built bundle is unsigned. The existing packaging and runtime invariants — the bootstrap running when packaged, the tray asset shipping inside the bundle, the single main-window owner, the menu-bar heartbeat driven from the imperative call sites, and readiness-gated messages into the renderer — must all keep holding.\n\nUnhappy paths: an install attempt on a machine that already has a daemon, which adopts it rather than duplicating it; an install needing a permission the user declines; a daemon that installs but never pairs; a publish attempted with no signing identity; a shell that cannot reach its update feed.",
+        "spec_sections": [
+          "02-daemon.md ### Desktop app and the local daemon",
+          "02-daemon.md ### Installation",
+          "05-surfaces.md ## Menu-bar (system tray) surface",
+          "05-surfaces.md ### Desktop packaging (Electron)",
+          "05-surfaces.md #### Runtime invariants",
+          "11-deployment.md ## Desktop code signing",
+          "11-deployment.md ## Version reporting",
+          "14-design-web.md ### `/settings` details",
+          "04-chats-and-folders.md ### Browsing (directory listing)",
+          "18-tech-stack.md ## Desktop shell (`packages/desktop`)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TE3",
+    "name": "Testing E3 (desktop local daemon and signing)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["E3"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "F1",
+    "name": "Mobile — machines at parity",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "B2", "C1", "C2", "C3", "C4", "C5", "D1", "D3"],
+    "tasks": [
+      {
+        "task": "The phone app carries everything machine-shaped in settings.\n\nSettings gains a hosts section: one row per machine with its name, its status shown exactly once, its daemon version and its update control, opening a sub-screen for that machine carrying its permission-mode default, its optional components with size, state and live progress where a download started here runs on that machine, its project folders with add and remove controls writing through to that machine, the control marking it the home machine, and removing it, confirmed and naming its chat count. Adding a machine asks the server for a registration code, shows it scannably and typeably beside the one-line install command the server gives it, and resolves when the machine being added redeems that code.\n\nBackend accounts are shown per machine, one row per backend, with live state and connect, switch and disconnect controls. Switching accounts must be possible from a phone: the machine's own terminal is out of reach from there, so pasting a token is the only route to a different account and it must exist here.\n\nThe section obeys the app's existing rules: no descriptive subtitle under any section header, one spacing scale, the top safe-area inset applied through the shared wrapper, the display face for titles, and both colour schemes resolving real values on every control.\n\nUnhappy paths: a component, credential or folder action aimed at an offline machine, refused up front naming it; a project root added at a path that machine does not have, reported as that; a machine whose first report has not arrived, which reads as loading rather than as disconnected; a rename to an empty name; removing the machine that is currently the home machine, following the one rule defined for that case.\n\nThe chat screen also carries the per-chat permission override, the second of the two scopes 02-daemon.md § Permission mode says every surface sets: the effective mode the next turn will use, a picker of the modes that chat's backend accepts, and a Use host default option that clears the override by sending chat.settings with the field omitted.",
+        "spec_sections": [
+          "15-design-mobile.md ## Settings tab",
+          "15-design-mobile.md ## Empty states",
+          "10-auth.md ## Backend credentials",
+          "10-auth.md ## Daemon registration (adding a host)",
+          "02-daemon.md ## Host identity",
+          "02-daemon.md ## Optional components (large models)",
+          "02-daemon.md ## Permission mode",
+          "02-daemon.md ### Installation",
+          "14-design-web.md ### `/settings` details",
+          "15-design-mobile.md ## Chat detail"
+        ]
+      },
+      {
+        "task": "The phone app's chat side learns about machines.\n\nThe new-chat folder browser opens at each machine's roots, grouped and labelled by machine, and drills into one machine's tree with a breadcrumb that appears only once the user has drilled in. Folder names are the primary label with the full path as muted secondary text, recently-used and machine-published folders sit at the top as one-tap shortcuts defaulting to the last used machine-and-folder pair, and an offline machine's group renders greyed with choosing from it reporting that it is offline. Picking a folder picks the machine, and that pair is what the spawn carries. A new chat spawns naming no model, resolved on the chosen machine, and the phone offers no model control at all.\n\nA machine being offline is a first-class banner that names it, scoped to that machine's chats and going app-level only when every machine is offline, with a tap-through to that machine's settings row. Navigation stays available, the composer stays usable and queues, spawning on an offline machine is refused, and only the ephemeral-audio controls are visibly disabled with the machine named. The diagnostics screen lists one line per registered machine and stays reachable from both banners.\n\nUnhappy paths: an offline machine chosen in the picker; a chat on a machine that has been removed; a queued message flushed to its own machine and no other; a machine whose presence is still unknown, which must not flash as offline on launch.",
+        "spec_sections": [
+          "15-design-mobile.md ## New chat flow",
+          "15-design-mobile.md ## Chats tab",
+          "15-design-mobile.md ## Chat detail",
+          "15-design-mobile.md ### Composer",
+          "15-design-mobile.md ## Offline / error states",
+          "15-design-mobile.md ## Native feel & launch performance",
+          "04-chats-and-folders.md ### Browsing (directory listing)",
+          "04-chats-and-folders.md ## Spawn",
+          "12-error-and-offline.md ### Host-offline UX",
+          "12-error-and-offline.md ### Connection diagnostics screen"
+        ]
+      },
+      {
+        "task": "The phone's Schedules editor reaches the same parity on machines.\n\nA spawn or ensure action picks its folder with the machine-grouped folder browser the new-chat flow uses, so picking a folder picks the machine and that pair is what the action stores. A message action takes its machine from the recipient chat, and the Skill dropdown is fetched for the action's target machine and folder. Saving a spawn or ensure action with no folder or no machine is blocked with a message that says so, matching the API's own rule, and the inline Schedules list on the Settings tab names the machine each job addresses.\n\nUnhappy paths: a job whose machine has been removed; a machine that goes offline between picking its folder and saving; a skill list that fails to load for the chosen machine.",
+        "spec_sections": [
+          "15-design-mobile.md ### Schedules editor",
+          "15-design-mobile.md ## Settings tab",
+          "08-triggers-and-jobs.md ## Action",
+          "14-design-web.md ## Schedules view"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TF1",
+    "name": "Testing F1 (mobile machines)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["F1"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "G1",
+    "name": "Command line — machines as a resource, and this machine as the default",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "A3", "B1", "B2", "C1", "C2", "C3", "C4", "C5", "D1", "D3"],
+    "tasks": [
+      {
+        "task": "The command line gains machines as a first-class resource and a default that matches where it is run. Its own spec now owns the whole command-line surface as one list — the surface, terminal-design and daemon documents each defer to it instead of restating a partial set, and the entries that used to live only in those documents (attaching to a live chat, resuming one, printing a transcript, revoking a linked surface, obtaining the first credential, opening a pairing code for another surface) are in that one list under their resource group. Where any document disagrees with it, it wins. Every command in that list is this group's to build, and the list is what decides that — a command is not skipped here for being absent from the summary below. The families whose data another group owns print what that group stores: jobs and their run logs name the machine each action addresses (D1), and the threads family names the home machine the three threads run on (D3).\n\nThe hosts family is every entry under hosts in 17-cli.md § Commands. Reaching every machine-scoped control the graphical surfaces have is that family's floor, so no machine setting is reachable from web or phone and not from here, and an entry with no graphical counterpart is built here just the same. It lists every registered machine with its name, status, version and components; shows one in full including its platform, its backends and their versions, its components, its permission-mode default and whether it carries the home marker; asks the server for a registration code and prints it scannably and typeably beside the server's install command, for the new machine's installer to redeem; renames one; MARKS ONE THE ACCOUNT'S HOME MACHINE; sets one's permission-mode default; lists, adds to and removes from one's project-folder registry; reads one's model catalogue; connects, switches and disconnects one backend's credential on one machine, the paste-a-token route included; installs AND REMOVES an optional component on one; applies an available daemon update to one; and removes one, confirmed and naming its chat count.\n\nEvery one of those subcommands accepts an explicit machine and defaults to the machine the command is invoked on — none is restricted to it. Removal is the single exception: it requires the machine to be named, so an irreversible revocation is never aimed by default.\n\nThe per-chat permission override is settable here too, the second of the two scopes every surface sets.\n\nRemoving the machine that is currently the home machine follows the single rule defined for that case, identically to every other surface; the command line does not invent its own answer.\n\nTwo flags name two different things and must never be conflated: one names the SERVER to talk to and flips the tool into remote mode; the other names a MACHINE to act on. The default machine for any command is the one it is invoked on, so starting a chat in a folder there runs there and talks to that machine's daemon over its local socket, presenting the key it reads from where that daemon keeps it. Addressing another machine is explicit, accepts either a name or the leading part of an id, and routes through the server instead of the local socket.\n\nStarting a chat may name a model or leave it out; left out, the model is resolved on the target machine. The interactive picker lists recent folders grouped by machine with this machine first. A non-interactive start validates the folder against the target machine and errors loudly when it is not there, with folder completion asked of the target machine so it works whichever machine the command line itself is on. Every machine-scoped command aimed at THIS machine goes over that machine's local socket, which carries one endpoint per host-scoped control for exactly that reason; opening the adoption window for a voice device is the one machine command that exists only there and takes no machine flag, because the daemon adopts the device itself and nothing in that exchange crosses the server. This group builds that command and the socket endpoint that opens the window; what the window then does with a device that announces itself belongs to the voice group (H1). The daemon subcommands remain for manual service control now that the installer registers the service, and status reports the daemon's version. Log tailing is per machine, and diagnostics reports per-machine status and each machine's pending backlog.\n\nThe surface stays single-resource operations only. What it deliberately does not carry is stated rather than left as a hole: transcript- and editor-shaped gestures belong to the surfaces that render them, and registering an Android push token can only be done by the device holding it. The machine-readable output mode stays the contract agents drive it through, and the agent-facing skill that teaches this surface is updated to match the full list. That skill ships inside the daemon artifact and the installer writes it into each machine's own agent skills directory, so it reaches every chat on that machine including the three special threads, rather than only chats started beneath one particular repository.\n\nUnhappy paths: a machine value that is ambiguous or unknown, which is an error listing the candidates rather than a guess; a local command run on a machine with no daemon, which says so rather than hanging; a machine named after it has been removed; an operation needing a live link to an offline machine, refused naming it. The server owns minting a registration code, renaming a host, marking one the home host and revoking one, so those four go over HTTP even when the command is invoked on that machine (02-daemon.md ## Control IPC, 17-cli.md ## Hosts and the CLI).",
+        "spec_sections": [
+          "17-cli.md ## Commands",
+          "17-cli.md ## Hosts and the CLI",
+          "17-cli.md ## Scope",
+          "17-cli.md ## Auth",
+          "17-cli.md ## Skill",
+          "13-design-terminal.md ## Invocation",
+          "13-design-terminal.md ## Subcommands",
+          "13-design-terminal.md ## Flag pass-through",
+          "05-surfaces.md ## Terminal (`patch` CLI)",
+          "02-daemon.md ## CLI",
+          "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+          "12-error-and-offline.md ## Observability",
+          "17-cli.md ## Completeness",
+          "10-auth.md ## Backend credentials",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "06-threads-manager-telegram-speakers.md ## Where special threads run"
+        ]
+      },
+      {
+        "task": "The chats, jobs, hooks, threads and surfaces command families, every invocation in 17-cli.md ## Commands, each with its --json shape. A command is delivered or it is reported missing; absence from a summary is not a reason to skip one.",
+        "spec_sections": [
+          "17-cli.md ## Commands",
+          "17-cli.md ## Hosts and the CLI",
+          "17-cli.md ## Scope",
+          "17-cli.md ## Auth",
+          "17-cli.md ## Skill",
+          "13-design-terminal.md ## Invocation",
+          "13-design-terminal.md ## Subcommands",
+          "13-design-terminal.md ## Flag pass-through",
+          "05-surfaces.md ## Terminal (`patch` CLI)",
+          "02-daemon.md ## CLI",
+          "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+          "12-error-and-offline.md ## Observability",
+          "17-cli.md ## Completeness",
+          "10-auth.md ## Backend credentials",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "06-threads-manager-telegram-speakers.md ## Where special threads run"
+        ]
+      },
+      {
+        "task": "The interactive picker, the --server/--host flag split, patch doctor, and the patch-cli skill shipped alongside the artifact.",
+        "spec_sections": [
+          "17-cli.md ## Commands",
+          "17-cli.md ## Hosts and the CLI",
+          "17-cli.md ## Scope",
+          "17-cli.md ## Auth",
+          "17-cli.md ## Skill",
+          "13-design-terminal.md ## Invocation",
+          "13-design-terminal.md ## Subcommands",
+          "13-design-terminal.md ## Flag pass-through",
+          "05-surfaces.md ## Terminal (`patch` CLI)",
+          "02-daemon.md ## CLI",
+          "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+          "12-error-and-offline.md ## Observability",
+          "17-cli.md ## Completeness",
+          "10-auth.md ## Backend credentials",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "06-threads-manager-telegram-speakers.md ## Where special threads run"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TG1",
+    "name": "Testing G1 (command line machines)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["G1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "H1",
+    "name": "Voice bound to a machine",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "C4", "D2", "D3", "E2", "F1", "G1"],
+    "tasks": [
+      {
+        "task": "Voice becomes something that happens on a particular machine.\n\nA chat's voice runs on that chat's own machine: the surface opens its audio session against that machine, and speaking to a chat requires the speech components to be installed there. Voice is therefore a per-machine capability rather than a property of the product.\n\nA surface disables a voice affordance whose component is missing on the machine in question and names both the machine and what is needed. Pressing it asks once, in a single prompt naming the download size and the machine, and on accept starts that machine's download with progress shown in place; declining cancels the action and starts nothing. A machine whose speech backend is remote installs nothing for it and still works.\n\nA physical speaker device belongs to one machine, adopted by that machine's own daemon inside a five-minute window that machine's command line opens on it (G1 builds that command and the socket endpoint behind it). This group builds what the window does: it stays open five minutes, the first device to announce itself inside it is recorded and its control link accepted from then on, an announcement outside a window is refused, and re-pairing moves a device to another machine. Nothing in that exchange reaches the server, because the device carries no account credential; the per-session voice token stays server-minted as it is for every other surface, fetched by the daemon on the device's behalf. An announcement addressed to speakers is therefore relayed to the machine those devices belong to — not to the calling chat's machine — and that machine synthesises and speaks it. The device listing an agent reads is this group's too, scoped to the calling chat's own machine and answered from that machine's own device register. The existing cascade for choosing a device, and its fall-through when none can be reached, is unchanged apart from being resolved on the devices' own machine, and its last step hands the message back to the server as an ordinary push notification rather than that machine reaching the push provider itself.\n\nThe machine that speaks an announcement writes no record of it. The record the speakers thread reads when the user replies is written by the server as it routes the announcement (09-notifications.md), so this group delivers and leaves the log alone.\n\nUnhappy paths: opening voice against a chat whose machine is offline; opening voice against a machine with the component missing; a speaker announcement whose devices' machine is offline, which continues down the existing cascade to its fallback; a component removed while a session is live; more concurrent sessions on one machine than it can carry.",
+        "spec_sections": [
+          "07-voice-app.md ### Production backends",
+          "07-voice-app.md ### Latency",
+          "07-voice-app.md ## Architecture",
+          "07-voice-app.md ## Concurrency on the daemon",
+          "07-voice-app.md ## End-to-end voice transport",
+          "07-voice-app.md ## Overlay surfaces — placement summary",
+          "09-notifications.md ### `speakers`",
+          "09-notifications.md ## The `patch_notify` tool",
+          "16-voice-device.md ## Connection model — audio relayed via daemon",
+          "16-voice-device.md ## Outbound routing (which device to ring)",
+          "16-voice-device.md ## Multiple devices",
+          "17-cli.md ## Commands",
+          "06-threads-manager-telegram-speakers.md ## Cross-chat toolset",
+          "02-daemon.md ## Optional components (large models)",
+          "03-wire-protocol.md ### Audio session (surface ↔ daemon)",
+          "12-error-and-offline.md ### Voice session mid-disconnect",
+          "09-notifications.md ## Broadcast context"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TH1",
+    "name": "Testing H1 (voice per machine)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["H1"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "I1",
+    "name": "Deployment split, environment split, and versions across every machine",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A2", "B2", "C1", "C2", "C4", "C5", "D1", "D3", "E3", "G1"],
+    "tasks": [
+      {
+        "task": "Deployment splits into a server that is deployed and a daemon that is installed.\n\nThe reference deployment carries the server and its reverse proxy only. The daemon is no longer part of that stack and is no longer a container. A machine may run both, in which case the daemon reaches the server over loopback and the shared data directory stays owned by the user the daemon runs as. Sizing guidance follows the split: a machine running voice needs the headroom voice needs, and a machine on remote speech-to-text with no components installed needs only what the daemon and the agent's own work need.\n\nThe environment splits accordingly: the speech-backend selection, its key, and the agent-backend credential seed are read by the daemon and belong in each machine's service environment rather than in the server's. Everything else stays the server's.\n\nBuilding splits too. Deploying means running the server, which builds and serves the web app with it. The daemon, the desktop app and the phone app are builds a person installs, and the daemon build publishes its artifacts to the server so one channel feeds both a new machine's install and every machine's self-update. A server deploy completes without touching any machine: every daemon's link drops and each one restores itself, and chats in flight during the restart surface the drop rather than hanging.\n\nVersion reporting now covers five independently delivered layers, and the daemon layer differs from machine to machine. Every layer is stamped from one source of truth, clients report themselves on connect, and the version report names every layer, every linked device, every machine's daemon and any drift between them with a remedy per item. An unstamped or unreadable layer reads as unknown rather than as agreement, a malformed report is rejected at the client boundary rather than rendering as \"everything agrees\", and a delivery that leaves the deployment inconsistent fails.\n\nBring the repository's own deploy recipe into line: it must stop describing the daemon as part of the compose stack, and its verification steps must check the server and each machine's link rather than a container. Cutting the existing single-daemon installation over is a clean re-pair, not a migration — write no migration code, and make sure nothing in the deploy path assumes pre-existing chats, jobs or buffered payloads are carried across. The recipe links a surface before it adds the machine, because the registration code comes from a linked surface and there is nothing to give an installer until one exists. Every step and every check the recipe names is an existing command from 17-cli.md § Commands, built by G1 — the first credential, the per-machine status the verification reads, and re-pairing each voice device to the host that carries its components, which is the one cutover step no graphical surface can perform. The recipe invents no command of its own.\n\nUnhappy paths: a deploy that leaves the web app behind the server; a machine reporting a version outside the range the server supports; a layer that cannot be read; a daemon publish that half-completes; a verification step that would pass against a stale artifact.",
+        "spec_sections": [
+          "11-deployment.md ## Host sizing",
+          "11-deployment.md ## Topology",
+          "11-deployment.md ## Reference deployment — the server (Docker Compose)",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Env",
+          "11-deployment.md ## Deploy guide",
+          "11-deployment.md ## Version reporting",
+          "11-deployment.md ## Backup",
+          "18-tech-stack.md ## Deployment",
+          "18-tech-stack.md ### Two shipping shapes",
+          "01-server.md ## Endpoints",
+          "02-daemon.md ## Runtime and installation",
+          "03-wire-protocol.md ### Control (anywhere ↔ server)",
+          "17-cli.md ## Commands"
+        ]
+      },
+      {
+        "task": "The daemon publish channel and the version reporting each layer contributes, end to end.",
+        "spec_sections": [
+          "11-deployment.md ## Host sizing",
+          "11-deployment.md ## Topology",
+          "11-deployment.md ## Reference deployment — the server (Docker Compose)",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Env",
+          "11-deployment.md ## Deploy guide",
+          "11-deployment.md ## Version reporting",
+          "11-deployment.md ## Backup",
+          "18-tech-stack.md ## Deployment",
+          "18-tech-stack.md ### Two shipping shapes",
+          "01-server.md ## Endpoints",
+          "02-daemon.md ## Runtime and installation",
+          "03-wire-protocol.md ### Control (anywhere ↔ server)",
+          "17-cli.md ## Commands"
+        ]
+      },
+      {
+        "task": "The deploy recipe brought into line with the split stack, inventing no command the CLI does not already provide.",
+        "spec_sections": [
+          "11-deployment.md ## Host sizing",
+          "11-deployment.md ## Topology",
+          "11-deployment.md ## Reference deployment — the server (Docker Compose)",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Env",
+          "11-deployment.md ## Deploy guide",
+          "11-deployment.md ## Version reporting",
+          "11-deployment.md ## Backup",
+          "18-tech-stack.md ## Deployment",
+          "18-tech-stack.md ### Two shipping shapes",
+          "01-server.md ## Endpoints",
+          "02-daemon.md ## Runtime and installation",
+          "03-wire-protocol.md ### Control (anywhere ↔ server)",
+          "17-cli.md ## Commands"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TI1",
+    "name": "Testing I1 (deployment split and version reporting)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["I1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "J1",
+    "name": "The spec-to-test index, rebuilt against the finished system",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [
+      "TA1",
+      "TA2",
+      "TA3",
+      "TB1",
+      "TB2",
+      "TC1",
+      "TC2",
+      "TC3",
+      "TC4",
+      "TC5",
+      "TD1",
+      "TD2",
+      "TD3",
+      "TE1",
+      "TE2",
+      "TE3",
+      "TF1",
+      "TG1",
+      "TH1",
+      "TI1"
+    ],
+    "tasks": [
+      {
+        "task": "The traceability index — the matrix mapping every spec file to the tests that cover its claims — lives with the engineering documentation rather than beside the spec, and it must describe the system as it now is rather than as it was before this change.\n\nRebuild it against the finished build: every spec file, its key claims including all the machine-shaped ones added here, and the tests that actually cover each. Status is marked honestly, and every remaining gap is named rather than papered over — a claim with no test is recorded as uncovered, and a test that only covers part of a claim says which part. Anything that can only be checked by a person, or only by the toolchain rather than at runtime, is marked as such rather than counted as covered.",
+        "spec_sections": [
+          "18-tech-stack.md ## Testing",
+          "00-overview.md ## Spec files",
+          "12-error-and-offline.md ## Observability"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TJ1",
+    "name": "Testing J1 (traceability index)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["J1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "FINAL",
+    "name": "Final full-system review",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [
+      "TA1",
+      "TA2",
+      "TA3",
+      "TB1",
+      "TB2",
+      "TC1",
+      "TC2",
+      "TC3",
+      "TC4",
+      "TC5",
+      "TD1",
+      "TD2",
+      "TD3",
+      "TE1",
+      "TE2",
+      "TE3",
+      "TF1",
+      "TG1",
+      "TH1",
+      "TI1",
+      "TJ1"
+    ],
+    "tasks": [
+      "accessibility-reviewer",
+      "performance-reviewer",
+      "security-reviewer",
+      "spec-reviewer",
+      "general-reviewer"
+    ]
+  }
+]

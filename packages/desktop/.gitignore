@@ -1,0 +1,5 @@
+# Override root .gitignore to keep electron-builder's buildResources tree
+# checked in (entitlements + future tray icons live here).
+!build/
+!build/**
+build/native/

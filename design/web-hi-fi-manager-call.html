@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · Manager active call (hi-fi v01)</title>
+<link rel="stylesheet" href="hi-fi-tokens.css">
+<style>
+  body { padding: 28px 0; }
+  .stage-label {
+    width: 1280px; margin: 0 auto 8px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-3);
+  }
+  .stage-label .num { background: var(--ink); color: var(--bg-app); padding: 2px 8px; margin-right: 8px; }
+  .stage-label .desc { text-transform: none; letter-spacing: 0; font-family: 'Inter', sans-serif; color: var(--ink-2); font-size: 13px; }
+
+  .stage {
+    width: 1280px; height: 720px;
+    margin: 0 auto 28px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    overflow: hidden;
+  }
+
+  /* sidebar dimmed */
+  .sidebar { background: var(--bg-panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; opacity: 0.55; }
+  .brandbar { padding: 18px 22px 16px; display: flex; align-items: center; gap: 6px; }
+  .brand { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 500; font-style: italic; font-size: 26px; }
+  .brandbar .conn-dot { margin-left: auto; }
+  .sb-list { flex: 1; overflow: hidden; }
+  .sb-row { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; padding: 8px 14px; align-items: baseline; margin: 0 8px; border-radius: var(--radius); }
+  .sb-row.special .name { font-weight: 600; }
+  .sb-row.active { background: var(--accent-tint); }
+  .sb-row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; color: var(--accent); }
+  .sb-row .status.voice { color: var(--voice); animation: pulse 1.6s ease-in-out infinite; }
+  .sb-row .body { min-width: 0; }
+  .sb-row .name { font-size: 13.5px; font-weight: 500; }
+  .sb-row .when { font-size: 11px; color: var(--voice); font-weight: 600; }
+  .divider { height: 1px; background: var(--line-soft); margin: 10px 16px; }
+  .sb-bottom { padding: 12px 16px 18px; border-top: 1px solid var(--line-soft); }
+  .sb-link { display: flex; align-items: center; padding: 8px 12px; border-radius: var(--radius); color: var(--ink-2); font-size: 13px; }
+  .sb-link .icon { color: var(--ink-3); margin-right: 10px; font-size: 14px; }
+  .new-chat-btn { margin-top: 10px; width: 100%; padding: 12px 16px; border: none; border-radius: var(--radius); background: var(--ink); color: var(--bg-panel); font-family: inherit; font-size: 13.5px; font-weight: 500; }
+
+  /* call canvas — takes over the main area */
+  .call {
+    background: linear-gradient(180deg, #2a221a 0%, #1a1410 100%);
+    color: var(--bg-elevated);
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  .call-head {
+    padding: 16px 28px;
+    display: flex; align-items: center; gap: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .call-head .pill {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    background: var(--voice); color: var(--bg-elevated);
+    padding: 4px 12px; border-radius: var(--radius-pill);
+    font-weight: 600;
+  }
+  .call-head .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bg-elevated); display: inline-block; margin-right: 6px; vertical-align: middle; animation: pulse 1.2s infinite; }
+  .call-head .timer { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: rgba(255,255,255,0.7); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  .call-stage {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 30px;
+    gap: 28px;
+  }
+  .avatar-large {
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 2px solid rgba(255,255,255,0.18);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 60px; color: var(--accent);
+    position: relative;
+  }
+  .avatar-large::before, .avatar-large::after {
+    content: ''; position: absolute; inset: -8px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    animation: ripple 2s ease-out infinite;
+  }
+  .avatar-large::after { animation-delay: 1s; }
+  @keyframes ripple {
+    0% { inset: -8px; opacity: 0.6; }
+    100% { inset: -32px; opacity: 0; }
+  }
+
+  .name {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: "opsz" 144, "SOFT" 50, "wght" 500;
+    font-size: 36px;
+    letter-spacing: -0.012em;
+  }
+  .live-transcript {
+    max-width: 520px;
+    text-align: center;
+    background: rgba(255,255,255,0.06);
+    border: 1px dashed rgba(255,255,255,0.18);
+    padding: 12px 18px;
+    border-radius: var(--radius);
+    font-style: italic;
+    color: rgba(255,255,255,0.85);
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  .live-transcript::before { content: '🎙 '; font-style: normal; }
+
+  .speaking-line {
+    max-width: 600px;
+    text-align: center;
+    color: var(--bg-elevated);
+    font-size: 16px;
+    line-height: 1.5;
+    border-left: 3px solid var(--accent);
+    padding-left: 16px;
+  }
+  .speaking-line .pill {
+    background: var(--accent); color: var(--bg-elevated);
+    padding: 2px 8px; border-radius: var(--radius-pill);
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em;
+    margin-right: 8px; display: inline-block; vertical-align: middle;
+  }
+
+  .waveform {
+    display: flex; gap: 3px; align-items: center; height: 36px; overflow: hidden;
+  }
+  .waveform .b { width: 4px; background: var(--accent); display: inline-block; border-radius: 2px; }
+  .waveform.muted .b { background: rgba(255,255,255,0.2); }
+
+  .call-foot {
+    padding: 22px 30px 36px;
+    display: flex; gap: 14px; justify-content: center; align-items: center;
+  }
+  .call-foot .ctl-btn {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    color: var(--bg-elevated);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    border: 1px solid rgba(255,255,255,0.15);
+    cursor: default;
+  }
+  .call-foot .ctl-btn:hover { background: rgba(255,255,255,0.15); }
+  .call-foot .ctl-btn.end {
+    background: var(--voice);
+    border-color: var(--voice);
+    width: 64px; height: 64px;
+  }
+</style>
+</head>
+<body>
+
+
+<div class="stage-label"><span class="num">1</span><span class="desc">Manager active call — full takeover after Accept</span></div>
+<div class="stage">
+
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span><span class="conn-dot"></span></div>
+    <div class="sb-list">
+
+      <div class="sb-section">
+        <div class="sb-row special active">
+          <div class="body"><div class="name">Manager</div></div>
+          <span class="when" style="color: var(--voice); font-weight: 600;">on call</span>
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-row pinned">
+          <span class="status"><span class="badge read">✓</span></span>
+          <div class="body">
+            <div class="name">Home Assistant</div>
+            <div class="preview">porch lights off · 14:08</div>
+          </div>
+          <span class="row-tools">
+            <span class="pin-marker" title="pinned"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+          </span>
+        </div>
+      </div>
+      <div class="divider pinned-div"></div>
+
+      <div class="folder-head">bed-planner</div>
+      <div class="sb-section">
+        <div class="sb-row in-folder">
+          <span class="status"><span class="badge permission"></span></span>
+          <div class="body"><div class="name">fix layout bug</div></div>
+          <span class="when">2m</span>
+        </div>
+      </div>
+
+      <div class="channels open">
+        <div class="ch-toggle">
+          <svg class="ch-chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          Channels
+        </div>
+        <div class="ch-list">
+          <div class="ch-row"><span class="ch-name">Telegram</span></div>
+          <div class="ch-row">
+            <span class="ch-name">Speakers</span>
+            <span class="ch-meta"><svg viewBox="0 0 24 24" width="11" height="11"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>kitchen</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-toggle">
+        <svg class="arch-icon" viewBox="0 0 24 24"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+        Archived
+      </div>
+
+    </div>
+    <div class="sb-bottom">
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>Schedules</div>
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+      <button class="new-chat-btn">+ New chat</button>
+    </div>
+  </div>
+
+  <div class="call">
+    <div class="call-head">
+      <span class="pill"><span class="dot"></span>on call · Manager</span>
+      <span class="timer">00:42</span>
+    </div>
+    <div class="call-stage">
+      <div class="avatar-large">★</div>
+      <div class="name">Manager</div>
+      <div class="speaking-line">
+        <span class="pill">SPEAKING</span>
+        I checked the build — it failed on the auth test. Want me to roll back and re-run it locally first?
+      </div>
+      <div class="waveform">
+        <span class="b" style="height: 8px"></span><span class="b" style="height: 14px"></span><span class="b" style="height: 22px"></span><span class="b" style="height: 28px"></span><span class="b" style="height: 18px"></span><span class="b" style="height: 11px"></span><span class="b" style="height: 24px"></span><span class="b" style="height: 30px"></span><span class="b" style="height: 16px"></span><span class="b" style="height: 8px"></span><span class="b" style="height: 22px"></span><span class="b" style="height: 26px"></span><span class="b" style="height: 18px"></span><span class="b" style="height: 13px"></span><span class="b" style="height: 24px"></span><span class="b" style="height: 28px"></span><span class="b" style="height: 18px"></span><span class="b" style="height: 9px"></span><span class="b" style="height: 19px"></span><span class="b" style="height: 26px"></span><span class="b" style="height: 21px"></span><span class="b" style="height: 14px"></span><span class="b" style="height: 8px"></span>
+      </div>
+    </div>
+    <div class="call-foot">
+      <span class="ctl-btn">🔇</span>
+      <span class="ctl-btn end">📞</span>
+      <span class="ctl-btn">⌨</span>
+    </div>
+  </div>
+
+</div>
+
+
+</body>
+</html>

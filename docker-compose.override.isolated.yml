@@ -1,0 +1,17 @@
+# Isolation override for the test stack: remap host ports to a high, uncommon
+# band (41000/41003/41080) so this stack never collides with the user's other
+# dev servers, and wire the host to the REAL Groq whisper backend (GROQ_API_KEY
+# is present in .env) instead of the mock the base file hardcodes.
+services:
+  server:
+    ports: !override
+      - '41000:3000'
+  daemon:
+    environment:
+      WHISPER_BACKEND: groq
+      GROQ_API_KEY: ${GROQ_API_KEY}
+    ports: !override
+      - '41003:3003'
+  caddy:
+    ports: !override
+      - '41080:80'

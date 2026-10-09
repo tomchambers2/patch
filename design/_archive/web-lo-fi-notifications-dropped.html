@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · notifications drawer (low-fi v01)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --diff-add: #e3f5e3;
+    --diff-del: #fbe3e3;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .stage {
+    width: 1280px;
+    height: 800px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 280px 6px 1fr;
+    grid-template-rows: 1fr;
+    position: relative;
+  }
+
+  /* sidebar (mostly identical to home) */
+  .sidebar { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .brandbar {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brandbar .brand { font-weight: 600; }
+  .bell {
+    border: 1px solid var(--ink);
+    padding: 1px 8px;
+    font-size: 11px;
+    background: var(--ink);
+    color: var(--bg);
+    cursor: default;
+  }
+  .bell .n {
+    background: var(--bg);
+    color: var(--ink);
+    padding: 0 5px;
+    border-radius: 8px;
+    font-size: 10px;
+    margin-left: 4px;
+  }
+
+  .sb-list { flex: 1; overflow: hidden; padding: 4px 0; }
+  .row {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 8px; padding: 4px 12px; align-items: baseline;
+  }
+  .row.special .body .name { font-weight: 600; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.idle { color: var(--muted); }
+  .row .status.special { color: var(--muted); }
+  .row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .when { font-size: 11px; color: var(--muted); }
+  .row.in-folder { padding-left: 24px; }
+  .folder-head { padding: 8px 12px 2px; color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+  .divider { border-top: 1px solid var(--line); margin: 4px 0; }
+  .arch-toggle { padding: 6px 12px; color: var(--muted); font-size: 12px; border-top: 1px dashed var(--line); }
+  .sb-bottom { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .sb-link { padding: 3px 0; }
+  .btn-block { margin-top: 4px; display: block; width: 100%; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); text-align: center; font-size: 12px; }
+
+  .gutter { background: var(--bg); border-left: 1px solid var(--line); border-right: 1px solid var(--line); cursor: col-resize; position: relative; }
+  .gutter::before { content: '⋮'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--muted); font-size: 12px; line-height: 1; }
+
+  /* main area (dimmed when drawer open) */
+  .main-dim {
+    grid-column: 3; grid-row: 1;
+    background: var(--fill);
+    opacity: 0.55;
+    overflow: hidden;
+    padding: 14px;
+  }
+  .main-dim .placeholder {
+    height: 100%;
+    border: 1px dashed var(--line);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  /* notifications drawer */
+  .drawer {
+    position: absolute;
+    top: 38px;       /* anchored just below the bell */
+    left: 220px;     /* anchored under the bell (right end of sidebar) */
+    width: 460px;
+    max-height: 720px;
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    display: flex; flex-direction: column;
+    z-index: 10;
+  }
+  .drawer-head {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .drawer-head .title { font-weight: 600; }
+  .drawer-head .meta { color: var(--muted); font-size: 12px; }
+  .drawer-head .right { margin-left: auto; display: flex; gap: 6px; }
+  .drawer-head .ctrl { font-size: 11px; border: 1px solid var(--line); padding: 1px 8px; background: var(--bg); }
+
+  .drawer-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line);
+    background: var(--fill);
+    padding: 0 8px;
+  }
+  .drawer-tabs .t {
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .drawer-tabs .t.active { color: var(--ink); border-bottom-color: var(--ink); }
+  .drawer-tabs .t .n { color: var(--muted); margin-left: 4px; }
+
+  .drawer-list { flex: 1; overflow: hidden; padding: 4px 0; }
+  .notif {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 14px 1fr auto;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .notif .dot { font-family: ui-monospace, monospace; font-size: 14px; line-height: 1; }
+  .notif.unread .dot { color: var(--running); }
+  .notif.read .dot { color: transparent; }
+  .notif .body { min-width: 0; }
+  .notif .body .where { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  .notif .body .msg { color: var(--ink); margin-top: 2px; }
+  .notif.read .body .where, .notif.read .body .msg { color: var(--muted); }
+  .notif .body .meta { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; align-items: center; }
+  .notif .body .meta .channel {
+    border: 1px solid var(--line);
+    padding: 0 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    color: var(--ink);
+    background: var(--fill);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .notif .body .meta .channel.permission { color: var(--waiting); border-color: var(--waiting); }
+  .notif .body .meta .channel.voice { color: var(--running); border-color: var(--running); }
+  .notif .when { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  .drawer-foot {
+    padding: 8px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--fill);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="brandbar">
+      <span class="brand">patch</span>
+      <span class="bell">🔔<span class="n">3</span></span>
+    </div>
+
+    <div class="sb-list">
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Manager</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status running">★</span><div class="body"><div class="name">Voice</div></div><span class="when"></span></div>
+
+      <div class="divider"></div>
+
+      <div class="folder-head">bed-planner</div>
+      <div class="row in-folder"><span class="status running">●</span><div class="body"><div class="name">fix layout bug</div></div><span class="when">2m</span></div>
+      <div class="row in-folder"><span class="status idle">·</span><div class="body"><div class="name">refactor api route</div></div><span class="when">12m</span></div>
+
+      <div class="folder-head">portfolio</div>
+      <div class="row in-folder"><span class="status waiting">!</span><div class="body"><div class="name">approve manifest write</div></div><span class="when">4m</span></div>
+
+      <div class="folder-head">health-tracker</div>
+      <div class="row in-folder"><span class="status idle">·</span><div class="body"><div class="name">weekly summary script</div></div><span class="when">38m</span></div>
+    </div>
+
+    <div class="arch-toggle">▸ archived (12)</div>
+
+    <div class="sb-bottom">
+      <span class="sb-link">Schedules</span>
+      <span class="sb-link">Settings</span>
+      <button class="btn-block">[ + new chat ]</button>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <!-- MAIN dimmed -->
+  <div class="main-dim">
+    <div class="placeholder">main / chat panel (dimmed while drawer is open)</div>
+  </div>
+
+  <!-- NOTIFICATIONS DRAWER -->
+  <div class="drawer">
+    <div class="drawer-head">
+      <span class="title">Notifications</span>
+      <span class="meta">3 unread</span>
+      <span class="right">
+        <span class="ctrl">Mark all read</span>
+        <span class="ctrl">×</span>
+      </span>
+    </div>
+
+    <div class="drawer-tabs">
+      <span class="t active">All <span class="n">7</span></span>
+      <span class="t">Unread <span class="n">3</span></span>
+      <span class="t">Permission <span class="n">1</span></span>
+      <span class="t">Voice <span class="n">1</span></span>
+    </div>
+
+    <div class="drawer-list">
+
+      <div class="notif unread">
+        <span class="dot">●</span>
+        <div class="body">
+          <div class="where">portfolio › approve manifest write</div>
+          <div class="msg">Approve write to <code>manifest.json</code>?</div>
+          <div class="meta"><span class="channel permission">! permission</span></div>
+        </div>
+        <span class="when">4m</span>
+      </div>
+
+      <div class="notif unread">
+        <span class="dot">●</span>
+        <div class="body">
+          <div class="where">bed-planner › fix layout bug</div>
+          <div class="msg">build complete · 0 errors · 1 warning</div>
+          <div class="meta"><span class="channel">push</span></div>
+        </div>
+        <span class="when">8m</span>
+      </div>
+
+      <div class="notif unread">
+        <span class="dot">●</span>
+        <div class="body">
+          <div class="where">Voice › kitchen device</div>
+          <div class="msg">Manager called: deploy to Hetzner failed</div>
+          <div class="meta"><span class="channel voice">voice call</span></div>
+        </div>
+        <span class="when">36m</span>
+      </div>
+
+      <div class="notif read">
+        <span class="dot">●</span>
+        <div class="body">
+          <div class="where">wild-swim › devon spots</div>
+          <div class="msg">pushed to main · #abc123</div>
+          <div class="meta"><span class="channel">desktop</span></div>
+        </div>
+        <span class="when">1h</span>
+      </div>
+
+      <div class="notif read">
+        <span class="dot">●</span>
+        <div class="body">
+          <div class="where">Telegram › weekly summary</div>
+          <div class="msg">summary delivered to Telegram</div>
+          <div class="meta"><span class="channel">telegram</span></div>
+        </div>
+        <span class="when">1h</span>
+      </div>
+
+      <div class="notif read">
+        <span class="dot">●</span>
+        <div class="body">
+          <div class="where">freeagent › monthly close</div>
+          <div class="msg">draft invoices ready for review</div>
+          <div class="meta"><span class="channel">push</span></div>
+        </div>
+        <span class="when">3h</span>
+      </div>
+
+    </div>
+
+    <div class="drawer-foot">
+      <span>oldest 30 days · click an item to jump to its chat</span>
+      <span>⌘. close · J/K next/prev</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

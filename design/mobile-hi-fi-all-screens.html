@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — mobile · all screens (hi-fi v01)</title>
+<link rel="stylesheet" href="hi-fi-tokens.css">
+<style>
+  body { background: #d4d0c4; padding: 36px 0; }
+  .deck {
+    display: grid;
+    grid-template-columns: repeat(3, 412px);
+    gap: 36px 32px;
+    justify-content: center;
+    padding-bottom: 60px;
+  }
+  .frame-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .label {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--ink-3);
+  }
+  .label .num { background: var(--ink); color: var(--bg-app); padding: 2px 8px; margin-right: 8px; }
+  .label .desc { text-transform: none; letter-spacing: 0; font-family: 'Inter', sans-serif; color: var(--ink); font-size: 13px; }
+
+  .phone {
+    width: 412px;
+    height: 1040px;
+    background: var(--bg-panel);
+    border: 1px solid var(--ink);
+    border-radius: 36px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  .status-bar { height: 36px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; color: var(--ink); flex-shrink: 0; }
+
+  /* screen header (chats / settings / etc) */
+  .screen-head { padding: 6px 22px 18px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .screen-head .title {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: "opsz" 144, "SOFT" 50, "wght" 500;
+    font-style: italic;
+    font-size: 30px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .screen-head .conn-dot { margin-left: auto; }
+
+  /* nav-bar (chat detail / sub-screens) */
+  .nav-bar {
+    padding: 8px 14px 12px;
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  .nav-bar .back { font-size: 22px; color: var(--ink); width: 22px; }
+  .nav-bar .title { flex: 1; min-width: 0; overflow: hidden; }
+  .nav-bar .title .folder { color: var(--ink-3); font-size: 10.5px; font-family: 'JetBrains Mono', ui-monospace, monospace; line-height: 1.2; }
+  .nav-bar .title .name {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: "opsz" 36, "SOFT" 50, "wght" 500;
+    font-size: 17px; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .nav-bar .right { display: flex; gap: 8px; align-items: center; }
+
+  /* status row (running / 2m ago) */
+  .status-pill-row {
+    padding: 0 22px 12px;
+    display: flex; gap: 8px; align-items: center;
+    flex-shrink: 0;
+  }
+  .badge { font-size: 11.5px; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--accent-tint); color: var(--accent-strong); font-weight: 500; border: 1px solid var(--accent-soft); }
+  .badge .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: middle; }
+
+  /* list */
+  .list { flex: 1; overflow: hidden; padding: 4px 14px 0; }
+  .special-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 4px 0;
+    margin-bottom: 16px;
+  }
+  .row { padding: 12px 14px; display: grid; grid-template-columns: 18px 1fr auto; gap: 12px; align-items: baseline; }
+  .row.special { padding: 13px 14px; }
+  .row.special + .row.special { border-top: 1px solid var(--line-soft); }
+  .row.special .name { font-weight: 600; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 14px; line-height: 1; text-align: center; color: var(--ink-3); }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.special { color: var(--accent); }
+  .row .body { min-width: 0; overflow: hidden; }
+  .row .name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.005em; }
+  .row .preview { font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+  .row .when { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .row.read .name { color: var(--read); font-weight: 500; }
+  .row.read .preview { color: var(--ink-faint); }
+  .row .when .live-dot { background: var(--accent); }
+
+  .chat-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 8px;
+  }
+  .chat-card.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint), var(--shadow-sm); }
+  .chat-card.read { opacity: 0.65; }
+
+  .folder-head {
+    padding: 14px 8px 8px;
+    color: var(--ink-3);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .folder-head::after { content: ''; flex: 1; height: 1px; background: var(--line-soft); }
+
+  .arch-toggle { margin: 14px 8px 0; padding: 10px 12px; color: var(--ink-3); font-size: 13px; }
+
+  /* new shape: target-ring badges + manager mic + pin + channels + archived */
+  .row.special { grid-template-columns: 1fr auto; }
+  .row.special .name { font-size: 16px; }
+  .row.special.m-special .name { font-size: 17px; }
+  .row .status .badge {
+    display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 5px var(--accent);
+    vertical-align: middle; margin-bottom: 1px;
+    padding: 0;
+  }
+  .row .status .badge.working {
+    box-shadow: none;
+    width: 10px; height: 10px;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  .row .status .badge.permission {
+    background: var(--waiting);
+    box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 5px var(--waiting);
+  }
+  .chat-card.active .row .status .badge { box-shadow: 0 0 0 2px var(--accent-tint), 0 0 0 5px var(--accent); }
+  .chat-card.active .row .status .badge.permission { box-shadow: 0 0 0 2px var(--accent-tint), 0 0 0 5px var(--waiting); }
+  .row .status .badge.read {
+    background: none; box-shadow: none;
+    width: auto; height: auto; padding: 0;
+    color: var(--ink-faint);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 13px;
+    border: none;
+    font-weight: 400;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+  .m-special .m-mic {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink-3);
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    margin-left: auto;
+  }
+  .m-pin {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--accent-strong);
+    margin-left: 6px;
+  }
+  .m-channels {
+    margin: 16px 8px 6px;
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .m-ch-toggle {
+    padding: 12px 14px;
+    color: var(--ink-2);
+    font-size: 14px;
+    font-weight: 500;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .m-ch-chev { stroke: var(--ink-3); transition: transform 0.15s ease; flex-shrink: 0; }
+  .m-channels.open .m-ch-chev { transform: rotate(90deg); }
+  .m-channels.open .m-ch-list { display: block; }
+  .m-ch-list { display: none; padding: 0 0 8px; }
+  .m-ch-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px;
+    margin: 0 6px;
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .m-ch-row .m-ch-name { flex: 1; }
+  .m-ch-row .m-ch-meta {
+    color: var(--accent-strong);
+    font-size: 11px;
+    background: var(--accent-tint);
+    padding: 2px 8px;
+    border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .m-archived {
+    margin: 16px 8px 4px;
+    padding: 12px 14px;
+    color: var(--ink-2);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 10px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .m-arch-icon { stroke: var(--ink-3); flex-shrink: 0; }
+  .tab-voice .voice-bubble {
+    width: 44px; height: 44px;
+    background: var(--accent);
+    color: var(--bg-elevated);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: -8px;
+    margin-top: -10px;
+  }
+  .tab-voice { color: var(--ink); font-weight: 600; }
+
+  .fab {
+    position: absolute; right: 22px; bottom: 96px;
+    width: 60px; height: 60px;
+    background: var(--accent); color: var(--bg-elevated);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 300;
+    box-shadow: var(--shadow); border: none;
+  }
+
+  .tab-bar {
+    height: 78px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-panel);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    flex-shrink: 0;
+    padding: 8px 14px 14px;
+  }
+  .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--ink-3); font-size: 11px; font-weight: 500; }
+  .tab .icon { font-size: 21px; line-height: 1; }
+  .tab.active { color: var(--accent); }
+
+  /* chat stream */
+  .stream { flex: 1; overflow: hidden; padding: 8px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .msg-user {
+    align-self: flex-end; max-width: 80%;
+    background: var(--accent-tint); color: var(--ink);
+    padding: 10px 14px; border-radius: 14px 14px 4px 14px;
+    font-size: 14px; border: 1px solid var(--accent-soft);
+    margin-left: 20%;
+  }
+  .msg-assistant { color: var(--ink); padding: 4px 0; font-size: 14px; line-height: 1.5; }
+  .tool-card {
+    background: var(--bg-panel); border: 1px solid var(--line-soft);
+    border-radius: var(--radius); padding: 9px 12px;
+    display: flex; align-items: center; gap: 10px; font-size: 12.5px;
+  }
+  .tool-card .icon { width: 24px; height: 24px; border-radius: var(--radius-sm); background: var(--bg-elevated); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--ink-2); flex-shrink: 0; }
+  .tool-card .body { flex: 1; min-width: 0; }
+  .tool-card .name { font-weight: 600; font-size: 12.5px; }
+  .tool-card .name .args { font-weight: 400; color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; margin-left: 4px; }
+  .tool-card .result { color: var(--ink-3); font-size: 11.5px; margin-top: 1px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .tool-card .chev { color: var(--ink-faint); font-size: 11px; }
+
+  .perm-card {
+    background: var(--bg-panel);
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius-lg);
+    padding: 14px 14px;
+    box-shadow: var(--shadow-sm);
+    margin: 4px 0;
+  }
+  .perm-card .head { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--ink-3); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .perm-card .diff { background: var(--bg-elevated); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 10px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; line-height: 1.55; }
+  .perm-card .diff .add { background: var(--diff-add); display: block; padding: 0 4px; border-radius: 2px; }
+  .perm-card .diff .del { background: var(--diff-del); display: block; padding: 0 4px; border-radius: 2px; }
+  .perm-card .question { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 36, "SOFT" 60, "wght" 500; font-size: 16px; margin: 4px 0 10px; letter-spacing: -0.005em; }
+  .perm-card .opts { display: flex; flex-direction: column; gap: 5px; }
+  .perm-card .opt { background: var(--bg-elevated); border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 12px; font-size: 13px; display: flex; gap: 10px; align-items: baseline; font-weight: 500; }
+  .perm-card .opt .num { color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; min-width: 14px; }
+  .perm-card .opt.yes { border-color: var(--accent); background: var(--accent); color: var(--bg-elevated); }
+  .perm-card .opt.yes .num { color: var(--bg-elevated); opacity: 0.65; }
+  .perm-card .opt.no { color: var(--ink-3); font-weight: 400; }
+  .perm-card .opt .esc-hint { margin-left: auto; color: var(--ink-faint); font-size: 11px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  .composer { border-top: 1px solid var(--line-soft); padding: 10px 14px 14px; display: flex; gap: 8px; align-items: flex-end; background: var(--bg-elevated); flex-shrink: 0; }
+  .composer .input { flex: 1; border: 1px solid var(--line); padding: 10px 14px; min-height: 42px; color: var(--ink-3); font-family: inherit; font-size: 14px; border-radius: var(--radius); background: var(--bg-panel); }
+  .composer .input.focused { border: 2px solid var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); padding: 9px 13px; }
+  .composer .input.focused::after { content: '|'; color: var(--ink); margin-left: 1px; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .composer .icon-btn { width: 42px; height: 42px; border: 1px solid var(--line); background: var(--bg-elevated); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--ink-2); flex-shrink: 0; }
+  .composer .send { background: var(--accent); color: var(--bg-elevated); border-color: var(--accent); }
+
+  .folder-pill { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; border: 1px solid var(--line); padding: 4px 8px; background: var(--bg-panel); border-radius: var(--radius-sm); color: var(--ink); }
+  .folder-pill .caret { color: var(--ink-3); margin-left: 4px; }
+
+  /* schedules sub-screen */
+  .sched-card {
+    margin: 8px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .sched-card .row1 { display: flex; align-items: baseline; gap: 8px; }
+  .sched-card .name { font-weight: 600; flex: 1; font-size: 14px; }
+  .sched-card .toggle { width: 28px; height: 16px; border-radius: 999px; background: var(--accent); position: relative; }
+  .sched-card .toggle::after { content: ''; position: absolute; top: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg-elevated); }
+  .sched-card .toggle.off { background: var(--ink-faint); }
+  .sched-card .toggle.off::after { right: auto; left: 2px; }
+  .sched-card .trig { color: var(--ink-3); font-size: 12.5px; margin-top: 4px; }
+  .sched-card .last-fired { margin-top: 8px; font-size: 12px; color: var(--ink); border-top: 1px dashed var(--line-soft); padding-top: 8px; }
+  .sched-card .last-fired a { color: var(--accent-strong); text-decoration: underline; }
+
+  /* settings sub */
+  .settings-scroll { flex: 1; overflow: hidden; }
+  .settings-section { padding: 14px 22px; border-bottom: 1px solid var(--line-soft); }
+  .settings-section h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 600; }
+  .settings-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 10px; align-items: baseline; padding: 5px 0; font-size: 13px; }
+  .settings-row .label { color: var(--ink-3); }
+  .settings-row .val { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; word-break: break-all; }
+  .settings-row .ctrl { font-size: 11.5px; padding: 4px 10px; border: 1px solid var(--line); background: var(--bg-elevated); color: var(--ink-2); border-radius: var(--radius-sm); font-weight: 500; }
+  .settings-row .ctrl.danger { color: var(--voice); border-color: var(--voice); }
+  .settings-section .nav-arrow { font-size: 16px; color: var(--ink-3); }
+  .nav-link {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    font-size: 14px; font-weight: 500;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* voice */
+  .voice-bar {
+    border-top: 2px solid var(--voice);
+    padding: 12px 14px;
+    background: #fcefe9;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px; align-items: center;
+    flex-shrink: 0;
+  }
+  .voice-bar .mic-state { display: flex; gap: 6px; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--voice); }
+  .voice-bar .mic-state .dot.live { animation: pulse 1.6s ease-in-out infinite; }
+  .voice-bar .mic-state.muted { color: var(--ink-3); font-weight: 500; }
+  .waveform { display: flex; gap: 2px; align-items: center; height: 22px; overflow: hidden; }
+  .waveform .b { width: 3px; background: var(--voice); display: inline-block; border-radius: 1px; }
+  .waveform.muted .b { background: var(--ink-faint); }
+  .voice-bar .end { border: 1px solid var(--voice); color: var(--voice); background: var(--bg-elevated); padding: 5px 14px; font-size: 12px; border-radius: var(--radius); font-weight: 500; }
+
+  .msg-user.transcript {
+    background: #fcefe9;
+    border: 1px dashed var(--voice);
+    color: var(--ink); font-style: italic;
+  }
+  .msg-user.transcript::before { content: '🎙 '; font-style: normal; }
+  .msg-assistant.speaking {
+    border: 1.5px solid var(--voice);
+    background: var(--bg-elevated);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .speaking-pill { background: var(--voice); color: var(--bg-elevated); padding: 2px 9px; border-radius: var(--radius-pill); font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; margin-bottom: 6px; display: inline-block; }
+
+  /* incoming call */
+  .call-screen { flex: 1; display: flex; flex-direction: column; background: linear-gradient(180deg, #2a221a 0%, #1a1410 100%); color: var(--bg-elevated); overflow: hidden; }
+  .call-screen .who-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 0 28px; }
+  .call-screen .label-top { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.6); margin-top: 30px; }
+  .call-screen .avatar {
+    width: 110px; height: 110px;
+    border: 2px solid var(--bg-elevated);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 48px; color: var(--accent);
+    margin-top: 30px;
+  }
+  .call-screen .name { font-family: 'Fraunces', Georgia, serif; font-size: 32px; font-weight: 500; letter-spacing: -0.012em; text-align: center; }
+  .call-screen .sub { color: rgba(255,255,255,0.6); font-size: 13px; text-align: center; }
+  .call-screen .reason {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    padding: 14px 16px; border-radius: var(--radius);
+    font-size: 13px; line-height: 1.5;
+    margin: 12px;
+  }
+  .call-screen .reason .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.6); margin-bottom: 4px; font-weight: 600; }
+  .call-screen .reason code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; }
+  .call-screen .actions { padding: 30px 36px 50px; display: flex; justify-content: space-between; align-items: center; }
+  .call-screen .btn { width: 70px; height: 70px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--bg-elevated); }
+  .call-screen .btn.dismiss { background: var(--voice); }
+  .call-screen .btn.accept { background: var(--accent); }
+  .call-screen .btn-label { font-size: 11px; color: rgba(255,255,255,0.65); margin-top: 6px; }
+  .call-screen .btn-wrap { display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+
+  <!-- 1 chats -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">1</span><span class="desc">Chats — landing</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="screen-head"><div class="title">patch</div><span class="conn-dot"></span></div>
+      <div class="list">
+        <div class="special-card">
+          <div class="row special m-special">
+            <div class="body"><div class="name">Manager</div></div>
+            <span class="m-mic"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+          </div>
+        </div>
+        <div class="chat-card pinned">
+          <div class="row">
+            <span class="status"><span class="badge read">✓</span></span>
+            <div class="body"><div class="name">Home Assistant</div><div class="preview">porch lights off · 14:08</div></div>
+            <span class="m-pin"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+          </div>
+        </div>
+        <div class="folder-head">bed-planner</div>
+        <div class="chat-card active"><div class="row"><span class="status"><span class="badge permission"></span></span><div class="body"><div class="name">fix layout bug</div><div class="preview">edit src/layout.ts — needs your OK</div></div><span class="when">2m</span></div></div>
+        <div class="chat-card"><div class="row"><span class="status"><span class="badge"></span></span><div class="body"><div class="name">refactor api route</div><div class="preview">draft proposed; awaiting your call</div></div><span class="when">12m</span></div></div>
+        <div class="folder-head">portfolio</div>
+        <div class="chat-card"><div class="row"><span class="status"><span class="badge working"></span></span><div class="body"><div class="name">deploy to vercel</div><div class="preview">running build…</div></div><span class="when">just now</span></div></div>
+        <div class="folder-head">freeagent</div>
+        <div class="chat-card read"><div class="row"><span class="status"><span class="badge read">✓</span></span><div class="body"><div class="name">monthly close</div><div class="preview">draft invoices ready for review</div></div><span class="when">1h</span></div></div>
+        <div class="m-channels open">
+          <div class="m-ch-toggle">
+            <svg class="m-ch-chev" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            Channels
+          </div>
+          <div class="m-ch-list">
+            <div class="m-ch-row"><span class="m-ch-name">Telegram</span></div>
+            <div class="m-ch-row">
+              <span class="m-ch-name">Speakers</span>
+              <span class="m-ch-meta"><svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>kitchen</span>
+            </div>
+          </div>
+        </div>
+        <div class="m-archived">
+          <svg class="m-arch-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+          Archived
+        </div>
+      </div>
+      <button class="fab">+</button>
+      <div class="tab-bar">
+        <div class="tab active"><span class="icon">💬</span><span>Chats</span></div>
+        <div class="tab tab-voice"><span class="voice-bubble">🎙</span><span>Voice</span></div>
+        <div class="tab"><span class="icon">⚙</span><span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 2 chat detail -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">2</span><span class="desc">Chat detail with permission card</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name">fix layout bug</div>
+        </div>
+      </div>
+      <div class="status-pill-row"><span class="badge"><span class="dot"></span>running</span></div>
+      <div class="stream">
+        <div class="msg-user">fix the layout bug — the right column overlaps the editor on narrow screens.</div>
+        <div class="msg-assistant">I'll read the layout file first.</div>
+        <div class="tool-card">
+          <span class="icon">📄</span>
+          <div class="body"><div class="name">Read <span class="args">src/layout.ts</span></div><div class="result">142 lines</div></div>
+          <span class="chev">▸</span>
+        </div>
+        <div class="msg-assistant">Found it — switching to <code style="font-family: 'JetBrains Mono', ui-monospace, monospace; background: var(--bg-soft); padding: 1px 5px; border-radius: 3px; font-size: 12px;">minmax</code>. Need your OK.</div>
+        <div class="perm-card">
+          <div class="head">Edit src/layout.ts</div>
+          <div class="diff">
+            <span class="del">−   grid: '400px 1fr',</span>
+            <span class="add">+   grid: 'minmax(280px, 1fr) 1fr',</span>
+          </div>
+          <div class="question">Do you want to proceed?</div>
+          <div class="opts">
+            <div class="opt yes"><span class="num">1</span><span>Yes</span></div>
+            <div class="opt"><span class="num">2</span><span>Yes, allow all edits this session</span></div>
+            <div class="opt no"><span class="num">3</span><span>No, and tell Claude what to do differently</span><span class="esc-hint">esc</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="input">Type a message…</div>
+        <span class="icon-btn">🎙</span>
+        <span class="icon-btn send">↑</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 3 new chat -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">3</span><span class="desc">New chat — folder pill, focused composer</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <span class="folder-pill">~/projects/bed-planner<span class="caret">▾</span></span>
+        </div>
+      </div>
+      <div class="stream" style="justify-content: center; align-items: center; color: var(--ink-faint); font-style: italic; font-size: 13px;">&nbsp;</div>
+      <div class="composer">
+        <div class="input focused">Type your first message…</div>
+        <span class="icon-btn">🎙</span>
+        <span class="icon-btn send">↑</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 4 schedules sub-screen -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">4</span><span class="desc">Schedules — sub-screen of Settings</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">Settings</div>
+          <div class="name">Schedules</div>
+        </div>
+      </div>
+      <div class="list" style="padding: 4px 0;">
+        <div class="sched-card">
+          <div class="row1"><span class="name">bus-watch</span><span class="toggle"></span></div>
+          <div class="trig">weekdays at 8:57 → spawn · skill <code style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px;">bus-watch</code></div>
+          <div class="last-fired">last ran <a>today 08:57</a></div>
+        </div>
+        <div class="sched-card">
+          <div class="row1"><span class="name">weekly newsletter</span><span class="toggle"></span></div>
+          <div class="trig">Sundays at 9am → spawn · skill</div>
+          <div class="last-fired">last ran <a>Sun 09:00</a></div>
+        </div>
+        <div class="sched-card">
+          <div class="row1"><span class="name">github merge alerts</span><span class="toggle"></span></div>
+          <div class="trig">GitHub webhook → message · prompt → Manager</div>
+          <div class="last-fired">last ran <a>12m ago</a></div>
+        </div>
+        <div class="sched-card">
+          <div class="row1"><span class="name">bin day reminder</span><span class="toggle"></span></div>
+          <div class="trig">Mondays at 7pm → spawn · skill</div>
+          <div class="last-fired">last ran <a>Mon 19:00</a></div>
+        </div>
+      </div>
+      <button class="fab">+</button>
+    </div>
+  </div>
+
+
+  <!-- 5 manager -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">5</span><span class="desc">Manager — chat detail</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="screen-head"><div class="title">Manager</div><span class="conn-dot"></span></div>
+      <div class="stream">
+        <div class="msg-user">what's going on across my chats?</div>
+        <div class="msg-assistant">3 active. bed-planner has fix-layout-bug running. portfolio's chat is paused on an approval. health-tracker just finished tests.</div>
+        <div class="msg-user">remind the bed-planner one to also run the test suite.</div>
+        <div class="msg-assistant">Done.</div>
+        <div class="tool-card"><span class="icon">→</span><div class="body"><div class="name">patch_send_to <span class="args">c_91FW2</span></div><div class="result">"after the layout fix lands, run npm test"</div></div><span class="chev">▸</span></div>
+        <div class="msg-user">schedule a weekly check-in every Friday 5pm.</div>
+        <div class="msg-assistant">Scheduled.</div>
+        <div class="tool-card"><span class="icon">⏰</span><div class="body"><div class="name">patch_job_create <span class="args">"weekly check-in"</span></div><div class="result">trigger: Fridays at 5pm</div></div><span class="chev">▸</span></div>
+      </div>
+      <div class="composer">
+        <div class="input">Type a message…</div>
+        <span class="icon-btn">🎙</span>
+        <span class="icon-btn send">↑</span>
+      </div>
+      <div class="tab-bar">
+        <div class="tab"><span class="icon">💬</span><span>Chats</span></div>
+        <div class="tab tab-voice"><span class="voice-bubble">🎙</span><span>Voice</span></div>
+        <div class="tab"><span class="icon">⚙</span><span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 6 settings -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">6</span><span class="desc">Settings</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="screen-head"><div class="title">Settings</div><span class="conn-dot"></span></div>
+      <div class="settings-scroll">
+        <div class="settings-section">
+          <h3>account</h3>
+          <div class="settings-row"><span class="label">email</span><span class="val">tom.chambers@gmail.com</span><span></span></div>
+          <div class="settings-row"><span class="label"></span><span></span><span class="ctrl danger">sign out</span></div>
+        </div>
+        <div class="settings-section">
+          <h3>claude subscription</h3>
+          <div class="settings-row"><span class="label">connected</span><span class="val">Claude Pro</span><span class="ctrl">disconnect</span></div>
+        </div>
+        <div class="settings-section">
+          <h3>automation</h3>
+          <div class="nav-link">Schedules <span class="nav-arrow">→</span></div>
+        </div>
+        <div class="settings-section">
+          <h3>surfaces</h3>
+          <div class="settings-row"><span class="label" style="color: var(--running);">●</span><span class="val">this iPhone</span><span></span></div>
+          <div class="settings-row"><span class="label" style="color: var(--running);">●</span><span class="val">Mac · web</span><span class="ctrl">remove</span></div>
+          <div class="settings-row"><span class="label" style="color: var(--running);">●</span><span class="val">kitchen voice device</span><span class="ctrl">remove</span></div>
+          <div class="settings-row"><span class="label"></span><span></span><span class="ctrl">+ add device</span></div>
+        </div>
+        <div class="settings-section">
+          <h3>integration keys</h3>
+          <div class="settings-row"><span class="label">TELEGRAM</span><span class="val" style="color: var(--ink-3);">••••</span><span class="ctrl">edit</span></div>
+          <div class="settings-row"><span class="label">GITHUB</span><span class="val" style="color: var(--ink-3);">••••</span><span class="ctrl">edit</span></div>
+          <div class="settings-row"><span class="label">TODOIST</span><span class="val" style="color: var(--ink-3);">— not set —</span><span class="ctrl">add</span></div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab"><span class="icon">💬</span><span>Chats</span></div>
+        <div class="tab tab-voice"><span class="voice-bubble">🎙</span><span>Voice</span></div>
+        <div class="tab active"><span class="icon">⚙</span><span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 7 voice listening -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">7</span><span class="desc">Voice active — listening</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name">fix layout bug</div>
+        </div>
+      </div>
+      <div class="stream">
+        <div class="msg-user">fix the layout bug.</div>
+        <div class="msg-assistant">Found it — switching to minmax. Run tests after?</div>
+        <div class="msg-user transcript">yeah do that and let me know if anything—</div>
+      </div>
+      <div class="voice-bar">
+        <span class="mic-state"><span class="dot live">●</span>listening</span>
+        <span class="waveform">
+          <span class="b" style="height: 6px"></span><span class="b" style="height: 12px"></span><span class="b" style="height: 18px"></span><span class="b" style="height: 22px"></span><span class="b" style="height: 14px"></span><span class="b" style="height: 9px"></span><span class="b" style="height: 16px"></span><span class="b" style="height: 21px"></span><span class="b" style="height: 13px"></span><span class="b" style="height: 7px"></span><span class="b" style="height: 19px"></span><span class="b" style="height: 14px"></span><span class="b" style="height: 22px"></span><span class="b" style="height: 18px"></span>
+        </span>
+        <span class="end">end</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 8 voice agent speaking -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">8</span><span class="desc">Voice active — agent speaking</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name">fix layout bug</div>
+        </div>
+      </div>
+      <div class="stream">
+        <div class="msg-user">fix the layout bug.</div>
+        <div class="msg-assistant">Found it — switching to minmax. Run tests after?</div>
+        <div class="msg-user">yeah do that and let me know if anything fails.</div>
+        <div class="msg-assistant speaking">
+          <div><span class="speaking-pill">🔊 SPEAKING</span></div>
+          On it. Switching the grid now and kicking off the test suite — about a minute.
+        </div>
+      </div>
+      <div class="voice-bar">
+        <span class="mic-state muted"><span class="dot">○</span>muted (agent)</span>
+        <span class="waveform muted">
+          <span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span>
+        </span>
+        <span class="end">end</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 9 incoming call -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">9</span><span class="desc">Manager incoming call (Android-native)</span></div>
+    <div class="phone">
+      <div class="status-bar" style="color: rgba(255,255,255,0.85); background: #1a1410;"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="call-screen">
+        <div class="who-area">
+          <div class="label-top">incoming patch call</div>
+          <div class="avatar">★</div>
+          <div>
+            <div class="name">Manager</div>
+            <div class="sub">special thread · voice session</div>
+          </div>
+          <div class="reason">
+            <div class="label">why it's calling</div>
+            Build of <code>health-tracker</code> failed in CI. Manager wants your call to decide whether to retry or roll back.
+          </div>
+        </div>
+        <div class="actions">
+          <div class="btn-wrap"><div class="btn dismiss">✕</div><div class="btn-label">Dismiss</div></div>
+          <div class="btn-wrap"><div class="btn accept">📞</div><div class="btn-label">Accept</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+</div>
+</body>
+</html>

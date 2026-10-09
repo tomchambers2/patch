@@ -1,0 +1,133 @@
+{
+  "purpose": "Findings the plan gate has already raised across six rounds, with how each was settled. A gate run discards any finding matching an entry here unless it can show the settled resolution is absent from the files.",
+  "settled": [
+    {
+      "id": "model-required-at-spawn",
+      "was": "model required at spawn sites that could not supply one (CLI, MCP tool, job actions, mobile, schedules editors)",
+      "resolution": "model is optional everywhere; a chat takes its host's last-used model",
+      "commit": "31bfdad"
+    },
+    {
+      "id": "model-fresh-host",
+      "was": "a brand-new host had no last-used model, so its first chat could not start",
+      "resolution": "seeded from the first catalogue the host reads successfully; absent until then, and a model-less spawn there is a loud error",
+      "commit": "d7137f8"
+    },
+    {
+      "id": "offline-spawn-vs-queue",
+      "was": "04 said sending to an offline host fails, 12 and 15 said it queues",
+      "resolution": "a message into an existing chat and an editor save queue; a spawn is refused up front",
+      "commit": "f373ace"
+    },
+    {
+      "id": "socket-auth",
+      "was": "three auth rules on one daemon socket after unification",
+      "resolution": "one rule: the local key as Bearer from every caller including the MCP child",
+      "commit": "19afbbe"
+    },
+    {
+      "id": "daemon-host-fields",
+      "was": "daemon.host lacked lastUsedModel, override count, home-host marker, last-seen",
+      "resolution": "first three on daemon.host; auth.ok hosts[] shape stated with lastSeenAt",
+      "commit": "5eeaa49"
+    },
+    {
+      "id": "host-discovery-for-agents",
+      "was": "patch_spawn required a daemonId no agent tool could supply",
+      "resolution": "patch_list_hosts, answered from GET /api/hosts with the daemonKey",
+      "commit": "a10f537"
+    },
+    {
+      "id": "pairing-direction",
+      "was": "02-daemon had the installer minting the pairing code, contradicting 10-auth",
+      "resolution": "a linked surface mints the nonce; the installer asks for the code and submits it",
+      "commit": "a10f537"
+    },
+    {
+      "id": "tools-panel-owner",
+      "was": "the per-chat permission override had no surface control",
+      "resolution": "E2 owns the Tools-panel picker, including clear-to-host-default",
+      "commit": "a10f537"
+    },
+    {
+      "id": "speakers-routing",
+      "was": "D3 routed speaker announcements to the home host",
+      "resolution": "they go to the machine the devices are paired with",
+      "commit": "a10f537"
+    },
+    {
+      "id": "coverage-in-spec",
+      "was": "COVERAGE.md was all code references inside spec/",
+      "resolution": "moved to docs/, with desktop packaging notes",
+      "commit": "2fce118"
+    },
+    {
+      "id": "plan-ordering-deps",
+      "was": "B1 lacked A2, F1 lacked C5, G1 lacked C3",
+      "resolution": "dependencies added; DAG re-verified",
+      "commit": "2fce118"
+    },
+    {
+      "id": "e3-stale-anchor",
+      "was": "E3 cited a 05-surfaces heading renamed when the packaging notes moved",
+      "resolution": "anchor corrected; all plan spec_sections verified to resolve",
+      "commit": "f373ace"
+    },
+    {
+      "id": "hello-version-fields",
+      "was": "hello gained clientGitSha/clientBuiltAt but A1 did not name them",
+      "resolution": "A1 names them; both optional on the frame",
+      "commit": "f373ace"
+    },
+    {
+      "id": "job-spawn-examples",
+      "was": "job examples outside the Action block omitted a field the Action block required",
+      "resolution": "every job spawn/ensure example checked and made consistent",
+      "commit": "298203a"
+    },
+    {
+      "id": "install-command-source",
+      "was": "the one-line install command surfaces render had no server source",
+      "resolution": "B2 owns it as a retrievable contract; E1/F1 depend on B2 and do not compose it locally",
+      "commit": "90f0bb6"
+    }
+  ],
+  "accepted": [
+    {
+      "id": "notarisation",
+      "decision": "out of scope; the artifact is signed with the project identity only"
+    },
+    {
+      "id": "migration",
+      "decision": "no migration code; cutover is a clean re-pair (deploy.md)"
+    },
+    {
+      "id": "home-host-removal-semantics",
+      "decision": "D3 defines the rule once and the surfaces consume it; the spec deliberately does not pre-decide it"
+    },
+    {
+      "id": "tech-stack-tbds",
+      "decision": "callkeep and Detox-vs-Maestro TBDs are not multi-host concerns and are out of scope for this change"
+    },
+    {
+      "id": "deploy-md-stale",
+      "decision": "I1 owns bringing the deploy recipe into line; deploy.md is not a spec file"
+    },
+    {
+      "id": "test-rig-placement",
+      "decision": "the two-real-daemon rig lands in C1, once a daemon knows its host identity"
+    },
+    {
+      "id": "esp32-hardware",
+      "decision": "physical voice-device clauses stay hardware- and human-gated"
+    },
+    {
+      "id": "spawn-sdk-literal",
+      "decision": "04 Spawn step 2's query() literal is illustrative; it need not enumerate every option the surrounding prose requires"
+    },
+    {
+      "id": "picker-sharing-order",
+      "decision": "a group that renders the host-grouped folder picker before the group that builds it may stub or share it; the orchestrator smooths this"
+    }
+  ]
+}

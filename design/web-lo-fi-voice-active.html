@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · voice-active state (low-fi v01)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --voice: #b73a3a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 24px 0;
+    background: #ddd;
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .stage-label {
+    width: 1280px;
+    margin: 24px auto 8px;
+    font-size: 12px;
+    color: #555;
+    font-family: ui-monospace, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stage-label .num { background: var(--ink); color: var(--bg); padding: 2px 8px; margin-right: 8px; }
+  .stage-label .desc { color: var(--ink); text-transform: none; letter-spacing: 0; font-family: -apple-system, system-ui, sans-serif; }
+
+  .stage {
+    width: 1280px;
+    height: 700px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    display: grid;
+    grid-template-columns: 280px 6px 1fr 6px 380px;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+  }
+  .gutter { background: var(--bg); border-left: 1px solid var(--line); border-right: 1px solid var(--line); position: relative; }
+  .gutter::before { content: '⋮'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--muted); font-size: 12px; line-height: 1; }
+
+  /* SIDEBAR */
+  .sidebar { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .brandbar { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .brandbar .brand { font-weight: 600; }
+  .sb-list { flex: 1; overflow: hidden; padding: 4px 0; }
+  .sb-row { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; padding: 4px 12px; align-items: baseline; }
+  .sb-row.special .body .name { font-weight: 600; }
+  .sb-row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; }
+  .sb-row .status.running { color: var(--running); }
+  .sb-row .status.waiting { color: var(--waiting); }
+  .sb-row .status.voice { color: var(--voice); }
+  .sb-row .status.idle { color: var(--muted); }
+  .sb-row .status.special { color: var(--muted); }
+  .sb-row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-row .when { font-size: 11px; color: var(--muted); }
+  .sb-row.in-folder { padding-left: 24px; }
+  .sb-row.active { background: var(--accent); }
+  .folder-head { padding: 8px 12px 2px; color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+  .divider { border-top: 1px solid var(--line); margin: 4px 0; }
+  .arch-toggle { padding: 6px 12px; color: var(--muted); font-size: 12px; border-top: 1px dashed var(--line); }
+  .sb-bottom { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .sb-link { padding: 3px 0; }
+  .btn-block { margin-top: 4px; display: block; width: 100%; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); text-align: center; font-size: 12px; }
+
+  /* MAIN */
+  .main { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-head { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: baseline; }
+  .main-head .folder { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
+  .main-head .title { font-weight: 600; }
+  .main-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .main-head .ctrl { font-size: 12px; border: 1px solid var(--line); padding: 2px 8px; background: var(--bg); }
+  .main-head .ctrl.voice-active { background: var(--voice); color: var(--bg); border-color: var(--voice); }
+
+  .stream { flex: 1; padding: 14px; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .msg { padding: 8px 10px; border: 1px solid var(--line); }
+  .msg.user { background: var(--fill); }
+  .msg.user.transcript { border-style: dashed; border-color: var(--voice); background: #fef5f5; }
+  .msg.user.transcript .role { color: var(--voice); }
+  .msg.assistant.speaking { border-color: var(--voice); border-width: 2px; }
+  .msg .role { font-size: 10px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.05em; display: flex; gap: 6px; align-items: baseline; }
+  .msg .role .pill { background: var(--voice); color: var(--bg); font-size: 9px; padding: 1px 6px; letter-spacing: 0.05em; }
+
+  /* voice bar — replaces composer when voice is active */
+  .voice-bar {
+    border-top: 2px solid var(--voice);
+    padding: 14px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
+    align-items: center;
+    background: #fef5f5;
+  }
+  .voice-bar .mic-state {
+    display: flex; gap: 8px; align-items: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--voice);
+  }
+  .voice-bar .mic-state .dot { font-family: ui-monospace, monospace; }
+  .voice-bar .mic-state .dot.live { color: var(--voice); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .voice-bar .mic-state.muted { color: var(--muted); }
+  .voice-bar .mic-state.muted .dot { color: var(--muted); animation: none; }
+
+  .waveform {
+    display: flex; gap: 2px; align-items: center; height: 24px;
+  }
+  .waveform .b {
+    width: 3px; background: var(--voice); display: inline-block;
+  }
+  .waveform.muted .b { background: var(--faded); }
+
+  .voice-bar .ctrls { display: flex; gap: 6px; }
+  .voice-bar .ctrl { font-size: 12px; border: 1px solid var(--line); padding: 4px 12px; background: var(--bg); }
+  .voice-bar .ctrl.danger { border-color: var(--voice); color: var(--voice); }
+
+  .editor { grid-column: 5; grid-row: 1; background: var(--fill); padding: 14px; }
+  .editor .box { height: 100%; border: 1px dashed var(--line); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+
+<!-- ─────────────────────────────────────────────── -->
+<!-- STAGE 1: user is speaking — mic live, live transcript -->
+<!-- ─────────────────────────────────────────────── -->
+<div class="stage-label"><span class="num">1</span><span class="desc">user is speaking — mic live (red, animating waveform), live transcript appearing as a dashed user bubble.</span></div>
+
+<div class="stage">
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span></div>
+    <div class="sb-list">
+      <div class="sb-row special"><span class="status special">★</span><div class="body"><div class="name">Manager</div></div><span class="when"></span></div>
+      <div class="sb-row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div><span class="when"></span></div>
+      <div class="sb-row special"><span class="status special">★</span><div class="body"><div class="name">Voice</div></div><span class="when"></span></div>
+      <div class="divider"></div>
+      <div class="folder-head">bed-planner</div>
+      <div class="sb-row in-folder active"><span class="status voice">🎙</span><div class="body"><div class="name">fix layout bug</div></div><span class="when">live</span></div>
+      <div class="sb-row in-folder"><span class="status idle">·</span><div class="body"><div class="name">refactor api route</div></div><span class="when">12m</span></div>
+      <div class="folder-head">portfolio</div>
+      <div class="sb-row in-folder"><span class="status waiting">!</span><div class="body"><div class="name">approve manifest write</div></div><span class="when">4m</span></div>
+    </div>
+    <div class="arch-toggle">▸ archived (12)</div>
+    <div class="sb-bottom">
+      <span class="sb-link">Schedules</span>
+      <span class="sb-link">Settings</span>
+      <button class="btn-block">[ + new chat ]</button>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <div class="main">
+    <div class="main-head">
+      <span class="folder">~/projects/bed-planner</span>
+      <span class="title">— fix layout bug</span>
+      <span class="right">
+        <span class="ctrl voice-active">🎙 voice live</span>
+        <span class="ctrl">[files]</span>
+      </span>
+    </div>
+
+    <div class="stream">
+      <div class="msg user"><div class="role">user</div>fix the layout bug — the right column is overlapping the editor on narrow screens.</div>
+      <div class="msg assistant"><div class="role">assistant</div>Found it — the grid has a fixed 400px column. Should I switch to minmax?</div>
+      <div class="msg user transcript">
+        <div class="role">user · live transcript <span class="pill">🎙 LISTENING</span></div>
+        yeah do that and then run the tests, let me know if anything—
+      </div>
+    </div>
+
+    <div class="voice-bar">
+      <span class="mic-state"><span class="dot live">●</span>listening</span>
+      <span class="waveform">
+        <!-- random-ish heights, capped, give a "live mic" feel -->
+        <span class="b" style="height: 6px"></span><span class="b" style="height: 11px"></span><span class="b" style="height: 18px"></span><span class="b" style="height: 22px"></span><span class="b" style="height: 14px"></span><span class="b" style="height: 8px"></span><span class="b" style="height: 16px"></span><span class="b" style="height: 21px"></span><span class="b" style="height: 13px"></span><span class="b" style="height: 7px"></span><span class="b" style="height: 19px"></span><span class="b" style="height: 23px"></span><span class="b" style="height: 12px"></span><span class="b" style="height: 5px"></span><span class="b" style="height: 17px"></span><span class="b" style="height: 20px"></span><span class="b" style="height: 9px"></span><span class="b" style="height: 14px"></span><span class="b" style="height: 22px"></span><span class="b" style="height: 18px"></span><span class="b" style="height: 11px"></span><span class="b" style="height: 6px"></span><span class="b" style="height: 15px"></span><span class="b" style="height: 21px"></span><span class="b" style="height: 13px"></span><span class="b" style="height: 8px"></span><span class="b" style="height: 17px"></span><span class="b" style="height: 19px"></span><span class="b" style="height: 11px"></span><span class="b" style="height: 7px"></span>
+      </span>
+      <span class="ctrls">
+        <span class="ctrl">mute</span>
+        <span class="ctrl danger">end</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+  <div class="editor"><div class="box">editor</div></div>
+</div>
+
+
+<!-- ─────────────────────────────────────────────── -->
+<!-- STAGE 2: agent speaking (TTS) — mic muted, agent bubble outlined -->
+<!-- ─────────────────────────────────────────────── -->
+<div class="stage-label"><span class="num">2</span><span class="desc">agent is speaking — mic auto-muted while TTS plays. assistant bubble outlined red, "speaking" pill.</span></div>
+
+<div class="stage">
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span></div>
+    <div class="sb-list">
+      <div class="sb-row special"><span class="status special">★</span><div class="body"><div class="name">Manager</div></div><span class="when"></span></div>
+      <div class="sb-row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div><span class="when"></span></div>
+      <div class="sb-row special"><span class="status special">★</span><div class="body"><div class="name">Voice</div></div><span class="when"></span></div>
+      <div class="divider"></div>
+      <div class="folder-head">bed-planner</div>
+      <div class="sb-row in-folder active"><span class="status voice">🎙</span><div class="body"><div class="name">fix layout bug</div></div><span class="when">live</span></div>
+      <div class="sb-row in-folder"><span class="status idle">·</span><div class="body"><div class="name">refactor api route</div></div><span class="when">12m</span></div>
+      <div class="folder-head">portfolio</div>
+      <div class="sb-row in-folder"><span class="status waiting">!</span><div class="body"><div class="name">approve manifest write</div></div><span class="when">4m</span></div>
+    </div>
+    <div class="arch-toggle">▸ archived (12)</div>
+    <div class="sb-bottom">
+      <span class="sb-link">Schedules</span>
+      <span class="sb-link">Settings</span>
+      <button class="btn-block">[ + new chat ]</button>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <div class="main">
+    <div class="main-head">
+      <span class="folder">~/projects/bed-planner</span>
+      <span class="title">— fix layout bug</span>
+      <span class="right">
+        <span class="ctrl voice-active">🎙 voice live</span>
+        <span class="ctrl">[files]</span>
+      </span>
+    </div>
+
+    <div class="stream">
+      <div class="msg user"><div class="role">user</div>fix the layout bug — the right column is overlapping the editor on narrow screens.</div>
+      <div class="msg assistant"><div class="role">assistant</div>Found it — the grid has a fixed 400px column. Should I switch to minmax?</div>
+      <div class="msg user"><div class="role">user · 🎙 voice</div>yeah do that and then run the tests, let me know if anything fails.</div>
+      <div class="msg assistant speaking" style="cursor: pointer;" title="click to silence">
+        <div class="role">assistant <span class="pill">🔊 SPEAKING</span> <span style="color: var(--muted); text-transform: none; letter-spacing: 0; font-style: italic;">— click to silence</span></div>
+        On it. Switching the grid now and kicking off the test suite — I'll let you know in about a minute.
+      </div>
+    </div>
+
+    <div class="voice-bar">
+      <span class="mic-state muted"><span class="dot">○</span>muted (agent speaking)</span>
+      <span class="waveform muted">
+        <span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span>
+      </span>
+      <span class="ctrls">
+        <span class="ctrl danger">end</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+  <div class="editor"><div class="box">editor</div></div>
+</div>
+
+</body>
+</html>

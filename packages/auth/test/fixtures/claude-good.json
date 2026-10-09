@@ -1,0 +1,8 @@
+{
+  "claudeAiOauth": {
+    "accessToken": "test-oauth-token-abc123",
+    "refreshToken": "test-refresh",
+    "expiresAt": 9999999999999,
+    "scopes": ["user:inference"]
+  }
+}

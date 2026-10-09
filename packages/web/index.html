@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- interactive-widget=resizes-content: on mobile, opening the soft keyboard
+         shrinks the layout viewport (so .chat-stream's own resize observer sees
+         it and re-pins/holds per follow mode below) instead of the OS panning
+         the whole page to keep the composer visible, which used to scroll
+         whatever the user was reading out from under them (Todoist: "opening
+         keyboard should keep same content focused on mobile"). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
+    <meta name="description" content="Patch — a thin coordination layer over Claude Code" />
+    <meta name="theme-color" content="#EBE7DC" />
+    <link rel="icon" type="image/svg+xml" href="/app/favicon.svg" />
+    <title>patch</title>
+    <!-- Theme always follows the OS via the prefers-color-scheme media query in
+         index.css (spec/14 § Theming). No override, no bootstrap needed. -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

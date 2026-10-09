@@ -1,0 +1,74 @@
+node_modules/
+dist/
+build/
+.turbo/
+.vite/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+deploy/.env
+deploy/build-info.json
+deploy/server-runtime/
+deploy/server-runtime.next/
+deploy/server-runtime.prev/
+data/
+models/
+coverage/
+.pnpm-store/
+*.log
+
+# Python voice sidecars (kokoro-sidecar / whisper-sidecar)
+.venv/
+__pycache__/
+*.pyc
+
+# Per-surface build outputs
+packages/desktop/release/
+packages/web/dist/
+packages/voice-firmware/build/
+packages/voice-firmware/sdkconfig
+packages/voice-firmware/sdkconfig.old
+packages/voice-firmware/managed_components/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/android/build/
+apps/mobile/android/app/build/
+apps/mobile/ios/build/
+deploy/certs/
+
+# local dev bring-up data dirs (minted credentials, daemon key). Cover every
+# per-run suffix variant (.dev-data-f1, -notify, -td2, -ui, …) — these hold
+# private keys + credentials and must NEVER be committed.
+.dev-data/
+.dev-data-*/
+
+# daemon dev runtime state (threads/sock/key created by dev runs)
+.patch/
+**/.patch/
+
+# transient reviewer/test artifacts (screenshots, scratch)
+.tmp/
+
+# Published APK (served at /api/download/patch.apk); keep the dir, ignore the binary
+deploy/downloads/*.apk
+.stryker-tmp/
+reports/mutation/
+
+# Personal delivery scripts — machine-specific targets (my box, my phone).
+# Never part of a clone; the generic build/deploy lives in package.json.
+scripts/local/
+
+# Claude Code local state — machine-specific settings + agent worktrees.
+.claude/settings.local.json
+.claude/worktrees/
+
+# Playwright output (transient).
+**/test-results/
+**/playwright-report/
+.a1-data/
+deploy/web-bot-auth.env
+
+# generated secrets, never tracked
+packages/server/artifacts/.link-secret
+.env.bak*

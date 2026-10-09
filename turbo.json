@@ -1,0 +1,27 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      // Same outputs as build: for most packages typecheck IS `tsc -b`, which
+      // emits dist/. Listing only the tsbuildinfo let a cache hit restore the
+      // "already built" marker WITHOUT the code it describes, so the next
+      // `tsc -b` saw an up-to-date project and emitted nothing. A checkout with
+      // a stale dist lying around hides that; the deploy's clean build tree
+      // does not.
+      "outputs": ["*.tsbuildinfo", "dist/**", "build/**"]
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    }
+  }
+}

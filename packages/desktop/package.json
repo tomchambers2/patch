@@ -1,0 +1,44 @@
+{
+  "name": "@patch/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Patch desktop shell — Electron wrapper around the web SPA (skeleton).",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -b && tsc -p src/first-run/tsconfig.json && node scripts/bundle-first-run.mjs && node scripts/copy-setup-page.cjs && node scripts/write-build-info.cjs",
+    "typecheck": "tsc -b && tsc -p src/first-run/tsconfig.json",
+    "clean": "rm -rf dist release *.tsbuildinfo",
+    "dev": "tsc -b && electron dist/main.js",
+    "lint": "eslint src",
+    "// test": "Discovery is by PATTERN, not a file list (spec/19-testing.md § Unit). The hand-written list this replaced had drifted: link-policy.test.ts and tray-toggle.test.ts were on disk and absent from it, so 16 passing tests ran in no suite and gated nothing.",
+    "test": "node --test --import tsx \"src/**/*.test.ts\" scripts/stage-resources.test.cjs",
+    "gen:tray": "node --import tsx ./scripts/gen-tray-icon.ts",
+    "smoke": "electron scripts/smoke.cjs",
+    "smoke:integration": "tsc -b && electron scripts/smoke-integration.cjs",
+    "smoke:iab": "tsc -b && electron scripts/smoke-in-app-browser.cjs",
+    "smoke:links": "tsc -b && electron scripts/smoke-link-choice.cjs",
+    "smoke:g4": "electron scripts/smoke-g4.cjs",
+    "smoke:drag-regions": "xvfb-run -a electron --no-sandbox scripts/smoke-drag-regions.cjs",
+    "// dist": "NO postdist. Replacing /Applications/Patch.app quits the running shell and never relaunches it, so every deploy left the desktop dead until it was started by hand. A published build now reaches this Mac the way it reaches any other — over the update feed, which relaunches on install (main.ts, patch:updater:check-and-install). `install:app` remains for a deliberate local install.",
+    "dist": "node scripts/dist.cjs",
+    "dist:dry": "node scripts/dist.cjs --dir",
+    "postdist:dry": "node scripts/install-to-applications.cjs",
+    "install:app": "node scripts/install-to-applications.cjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@patch/auth": "workspace:*",
+    "@patch/relay": "workspace:*",
+    "@patch/wire": "workspace:*",
+    "@types/node": "^22.9.0",
+    "@types/ws": "^8.18.1",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "ws": "^8.20.0"
+  }
+}

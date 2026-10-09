@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — all screens (hi-fi)</title>
+<link rel="stylesheet" href="hi-fi-tokens.css">
+<style>
+  body { background: var(--bg-app); padding: 0; }
+  .wrap { max-width: 1340px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  header.top { padding: 24px 0 32px; border-bottom: 1px solid var(--line); margin-bottom: 32px; }
+  header.top h1 { margin: 0 0 8px; font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 144, "SOFT" 50, "wght" 500; font-style: italic; font-size: 36px; letter-spacing: -0.012em; }
+  header.top .sub { color: var(--ink-3); font-size: 14px; }
+
+  nav.toc { background: var(--bg-panel); border: 1px solid var(--line); padding: 22px 28px; margin-bottom: 36px; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+  nav.toc h2 { margin: 0 0 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; }
+  nav.toc .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; }
+  nav.toc h3 { margin: 0 0 10px; font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 36, "SOFT" 50, "wght" 500; font-size: 18px; }
+  nav.toc ol { margin: 0; padding: 0 0 0 22px; font-size: 14px; }
+  nav.toc ol li { margin-bottom: 6px; }
+  nav.toc a { color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(--ink-3); }
+  nav.toc a:hover { border-bottom-style: solid; color: var(--accent-strong); }
+
+  section.surface { margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--line); }
+  section.surface > h2 { margin: 0 0 8px; font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 144, "SOFT" 50, "wght" 500; font-size: 30px; letter-spacing: -0.012em; }
+  section.surface > .surface-sub { color: var(--ink-3); font-size: 13px; margin-bottom: 28px; }
+
+  .screen-block { margin-bottom: 56px; }
+  .screen-block .screen-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .screen-block .num { background: var(--ink); color: var(--bg-app); padding: 4px 10px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; border-radius: var(--radius-sm); }
+  .screen-block .title { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 36, "SOFT" 50, "wght" 500; font-size: 19px; }
+  .screen-block .desc { color: var(--ink-3); font-size: 13px; }
+  .screen-block .file { margin-left: auto; color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; }
+
+  iframe.web {
+    width: 1320px;
+    border: 1px solid var(--line);
+    background: var(--bg-app);
+    display: block;
+    border-radius: var(--radius-lg);
+  }
+  iframe.full-mobile-deck {
+    width: 1330px;
+    border: 1px solid var(--line);
+    background: #d4d0c4;
+    display: block;
+    border-radius: var(--radius-lg);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>patch — all screens</h1>
+    <div class="sub">high-fidelity review · web + mobile · leaf green + Fraunces + Inter on warm cream paper</div>
+  </header>
+
+  <nav class="toc">
+    <h2>contents</h2>
+    <div class="cols">
+      <div>
+        <h3>Web</h3>
+        <ol>
+          <li><a href="#web-home">Home (chat detail)</a></li>
+          <li><a href="#web-kebab">Chat kebab menu open</a></li>
+          <li><a href="#web-speakers">Speakers thread (read-only)</a></li>
+          <li><a href="#web-newchat">New chat</a></li>
+          <li><a href="#web-editor">Editor (tree + diff/file)</a></li>
+          <li><a href="#web-schedules">Schedules</a></li>
+          <li><a href="#web-settings">Settings</a></li>
+          <li><a href="#web-voice">Voice active (2 frames)</a></li>
+          <li><a href="#web-incoming">Manager incoming call</a></li>
+          <li><a href="#web-manager-call">Manager active call</a></li>
+          <li><a href="#web-variants">Variants — empty / offline / Bash perm / archived</a></li>
+          <li><a href="#web-menubar">Menu bar — dropdown + voice note + voice call</a></li>
+        </ol>
+      </div>
+      <div>
+        <h3>Mobile</h3>
+        <ol>
+          <li><a href="#mobile-deck">All 9 mobile frames</a></li>
+          <li><a href="#mobile-editor">Mobile editor (tree + diff)</a></li>
+          <li><a href="#mobile-variants">Variants — empty / offline / Bash perm / archived</a></li>
+        </ol>
+      </div>
+    </div>
+  </nav>
+
+
+  <section class="surface" id="web">
+    <h2>Web</h2>
+    <div class="surface-sub">3-column shell · sidebar · main · editor (opens on demand)</div>
+
+    <div class="screen-block" id="web-home">
+      <div class="screen-head">
+        <span class="num">W1</span>
+        <span class="title">Home — chat detail</span>
+        <span class="desc">Manager pinned at top, HA pinned chat, Channels box (collapsed by default), permission card on the active chat</span>
+        <span class="file">web-hi-fi.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi.html" height="980"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-kebab">
+      <div class="screen-head">
+        <span class="num">W1b</span>
+        <span class="title">Chat kebab menu open</span>
+        <span class="desc">Pin chat / View event log / Delete chat — popover anchored to the ⋯ button</span>
+        <span class="file">web-hi-fi-kebab.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-kebab.html" height="980"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-speakers">
+      <div class="screen-head">
+        <span class="num">W1c</span>
+        <span class="title">Speakers thread (read-only)</span>
+        <span class="desc">voice transcript across kitchen / bedroom devices; no composer; sidebar shows Speakers active in Channels</span>
+        <span class="file">web-hi-fi-speakers.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-speakers.html" height="1040"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-newchat">
+      <div class="screen-head">
+        <span class="num">W2</span>
+        <span class="title">New chat — opens directly in main</span>
+        <span class="desc">no modal; folder pill defaulted; composer focused</span>
+        <span class="file">web-hi-fi-newchat.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-newchat.html" height="860"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-editor">
+      <div class="screen-head">
+        <span class="num">W3</span>
+        <span class="title">Editor — one surface, two modes</span>
+        <span class="desc">stage 1: dirty file in diff. stage 2: clean file</span>
+        <span class="file">web-hi-fi-editor.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-editor.html" height="1640"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-schedules">
+      <div class="screen-head">
+        <span class="num">W4</span>
+        <span class="title">Schedules — list + slide-in editor</span>
+        <span class="desc">github merge alerts selected; webhook config + filter + action</span>
+        <span class="file">web-hi-fi-schedules.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-schedules.html" height="860"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-settings">
+      <div class="screen-head">
+        <span class="num">W5</span>
+        <span class="title">Settings</span>
+        <span class="desc">account · Claude OAuth · surfaces + pairing · keys · daemon · root · voice</span>
+        <span class="file">web-hi-fi-settings.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-settings.html" height="980"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-voice">
+      <div class="screen-head">
+        <span class="num">W6</span>
+        <span class="title">Voice active — 2-frame storyboard</span>
+        <span class="desc">listening + agent speaking</span>
+        <span class="file">web-hi-fi-voice-active.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-voice-active.html" height="1530"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-incoming">
+      <div class="screen-head">
+        <span class="num">W7</span>
+        <span class="title">Manager incoming call</span>
+        <span class="desc">overlay with reason; Accept ⏎ / Dismiss</span>
+        <span class="file">web-hi-fi-incoming-call.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-incoming-call.html" height="860"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-manager-call">
+      <div class="screen-head">
+        <span class="num">W7b</span>
+        <span class="title">Manager active call</span>
+        <span class="desc">in-call view after accepting; ripple avatar, transcript line, mute / end / keypad</span>
+        <span class="file">web-hi-fi-manager-call.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-manager-call.html" height="780"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-variants">
+      <div class="screen-head">
+        <span class="num">W8</span>
+        <span class="title">Variants</span>
+        <span class="desc">V1 empty · V2 daemon offline · V3 Bash permission · V4 archived expanded</span>
+        <span class="file">web-hi-fi-variants.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-variants.html" height="3000"></iframe>
+    </div>
+
+    <div class="screen-block" id="web-menubar">
+      <div class="screen-head">
+        <span class="num">W9</span>
+        <span class="title">Menu bar — dropdown + voice note + voice call</span>
+        <span class="desc">three frames: glanceable status dropdown, voice-note overlay (single turn), voice-call overlay (persistent bidirectional)</span>
+        <span class="file">web-hi-fi-menubar.html</span>
+      </div>
+      <iframe class="web" src="web-hi-fi-menubar.html" height="2400"></iframe>
+    </div>
+
+  </section>
+
+
+  <section class="surface" id="mobile">
+    <h2>Mobile</h2>
+    <div class="surface-sub">3 bottom tabs · Schedules under Settings · 9 frames in a 3-column phone grid</div>
+
+    <div class="screen-block" id="mobile-deck">
+      <div class="screen-head">
+        <span class="num">M</span>
+        <span class="title">All 9 mobile frames</span>
+        <span class="desc">1 Chats · 2 Chat detail · 3 New chat · 4 Schedules · 5 Manager · 6 Settings · 7 Voice listening · 8 Voice agent speaking · 9 Manager incoming call</span>
+        <span class="file">mobile-hi-fi-all-screens.html</span>
+      </div>
+      <iframe class="full-mobile-deck" src="mobile-hi-fi-all-screens.html" height="2900"></iframe>
+    </div>
+
+    <div class="screen-block" id="mobile-editor">
+      <div class="screen-head">
+        <span class="num">M-E</span>
+        <span class="title">Mobile editor</span>
+        <span class="desc">M-E1 file tree · M-E2 diff view</span>
+        <span class="file">mobile-hi-fi-editor.html</span>
+      </div>
+      <iframe class="full-mobile-deck" src="mobile-hi-fi-editor.html" height="980"></iframe>
+    </div>
+
+    <div class="screen-block" id="mobile-variants">
+      <div class="screen-head">
+        <span class="num">M-V</span>
+        <span class="title">Mobile variants</span>
+        <span class="desc">M-V1 empty · M-V2 offline · M-V3 Bash · M-V4 archived</span>
+        <span class="file">mobile-hi-fi-variants.html</span>
+      </div>
+      <iframe class="full-mobile-deck" src="mobile-hi-fi-variants.html" height="1900"></iframe>
+    </div>
+
+  </section>
+
+</div>
+</body>
+</html>

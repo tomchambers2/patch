@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — mobile · all screens (low-fi v01)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --voice: #b73a3a;
+    --voice-bg: #fef5f5;
+    --diff-add: #e3f5e3;
+    --diff-del: #fbe3e3;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 32px 0;
+    background: #d4d4d4;
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  /* deck layout — 3 columns of phones */
+  .deck {
+    display: grid;
+    grid-template-columns: repeat(3, 412px);
+    gap: 36px 28px;
+    justify-content: center;
+    padding-bottom: 60px;
+  }
+  .frame-wrap {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .label {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #444;
+    padding: 0 4px;
+  }
+  .label .num { background: var(--ink); color: var(--bg); padding: 2px 8px; margin-right: 8px; }
+  .label .desc { text-transform: none; letter-spacing: 0; font-family: -apple-system, system-ui, sans-serif; color: var(--ink); font-size: 13px; }
+
+  .phone-frame {
+    width: 412px;
+    height: 850px;
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    border-radius: 28px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* status bar */
+  .status-bar {
+    height: 32px;
+    padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  /* ── shared list row primitives ───────── */
+  .row {
+    padding: 10px 18px;
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+    border-bottom: 1px solid var(--fill);
+  }
+  .row.special { padding: 12px 18px; }
+  .row.special .name { font-weight: 600; }
+  .row.in-folder { padding-left: 38px; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 14px; line-height: 1; text-align: center; }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.idle { color: var(--muted); }
+  .row .status.read { color: var(--faded); }
+  .row .status.special { color: var(--muted); }
+  .row .body { min-width: 0; overflow: hidden; }
+  .row .name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .preview { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .row .when { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .row.read .name { color: var(--muted); }
+  .folder-head {
+    padding: 10px 18px 4px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-family: ui-monospace, monospace;
+  }
+  .arch-toggle { padding: 12px 18px; color: var(--muted); font-size: 12px; border-top: 1px dashed var(--line); }
+
+  /* tab bar */
+  .tab-bar {
+    height: 60px;
+    border-top: 1px solid var(--line);
+    background: var(--fill);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    flex-shrink: 0;
+    padding-bottom: 4px;
+  }
+  .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--muted); font-size: 10px; }
+  .tab .icon { font-size: 18px; line-height: 1; }
+  .tab.active { color: var(--ink); font-weight: 600; }
+
+  /* screen header */
+  .screen-head {
+    padding: 4px 18px 10px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .screen-head .title { font-size: 20px; font-weight: 600; }
+  .screen-head .right { margin-left: auto; }
+
+  /* nav bar (within a chat) */
+  .nav-bar {
+    padding: 6px 12px 10px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .nav-bar .back { font-size: 22px; color: var(--ink); width: 22px; }
+  .nav-bar .title { flex: 1; min-width: 0; overflow: hidden; }
+  .nav-bar .title .folder { color: var(--muted); font-size: 10px; font-family: ui-monospace, monospace; line-height: 1.2; }
+  .nav-bar .title .name { font-weight: 600; font-size: 15px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-bar .right { display: flex; gap: 8px; }
+  .nav-bar .icon-btn {
+    width: 30px; height: 30px;
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    background: var(--bg);
+  }
+
+  .chat-list { flex: 1; overflow: hidden; padding: 8px 0; }
+
+  /* chat detail stream — polished native UI, every Claude event rendered */
+  .stream { flex: 1; overflow: hidden; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { font-size: 14px; line-height: 1.45; }
+  .msg.user {
+    background: var(--accent);
+    padding: 10px 12px;
+    border-radius: 14px 14px 4px 14px;
+    align-self: flex-end;
+    max-width: 80%;
+    margin-left: 20%;
+  }
+  .msg.assistant {
+    color: var(--ink);
+    padding: 0 4px;
+  }
+  .tool-card {
+    background: var(--fill);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .tool-card .icon {
+    width: 22px; height: 22px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .tool-card .body { flex: 1; min-width: 0; }
+  .tool-card .name { font-weight: 600; font-size: 13px; }
+  .tool-card .name .args { font-weight: 400; color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; margin-left: 6px; }
+  .tool-card .result { color: var(--muted); font-size: 12px; margin-top: 2px; font-family: ui-monospace, monospace; }
+  .tool-card .chevron { color: var(--muted); font-size: 12px; }
+
+  /* permission card — mirrors claude code terminal options */
+  .perm-card {
+    border: 1px solid var(--ink);
+    background: var(--fill);
+    padding: 10px 12px;
+    margin: 8px 0;
+    font-size: 13px;
+  }
+  .perm-card .head { font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 6px; }
+  .perm-card .question { font-weight: 600; margin-bottom: 8px; font-size: 13px; }
+  .perm-card .diff {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    padding: 6px 8px;
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+  .perm-card .diff .add { background: var(--diff-add); display: block; }
+  .perm-card .diff .del { background: var(--diff-del); display: block; }
+  .perm-card .opts { display: flex; flex-direction: column; gap: 4px; }
+  .perm-card .opt {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    padding: 8px 10px;
+    font-size: 13px;
+    display: flex; gap: 10px; align-items: baseline;
+  }
+  .perm-card .opt .num { color: var(--muted); font-family: ui-monospace, monospace; min-width: 14px; }
+  .perm-card .opt.yes { border-color: var(--ink); }
+  .perm-card .opt.no { color: var(--muted); }
+  .perm-card .opt .esc-hint { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+  /* composer */
+  .composer {
+    border-top: 1px solid var(--line);
+    padding: 10px 12px 14px;
+    display: flex; gap: 8px; align-items: flex-end;
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  .composer .input {
+    flex: 1;
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+    min-height: 40px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .composer .input.focused { border-color: var(--ink); border-width: 2px; padding: 9px 11px; }
+  .composer .input.focused::after { content: '|'; color: var(--ink); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .composer .icon-btn {
+    width: 40px; height: 40px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .composer .icon-btn.send { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  /* FAB */
+  .fab {
+    position: absolute;
+    right: 16px; bottom: 76px;
+    width: 52px; height: 52px;
+    border: 2px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 300;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+
+  /* folder pill */
+  .folder-pill {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    border: 1px solid var(--line);
+    padding: 3px 8px;
+    background: var(--bg);
+  }
+  .folder-pill .caret { color: var(--muted); margin-left: 6px; }
+
+  /* schedules card */
+  .sched-card {
+    margin: 8px 18px;
+    border: 1px solid var(--line);
+    padding: 12px;
+  }
+  .sched-card .row1 { display: flex; align-items: baseline; gap: 8px; }
+  .sched-card .name { font-weight: 600; flex: 1; }
+  .sched-card .toggle { width: 26px; height: 14px; border-radius: 7px; background: var(--running); position: relative; }
+  .sched-card .toggle::after { content: ''; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); }
+  .sched-card .toggle.off { background: var(--faded); }
+  .sched-card .toggle.off::after { right: auto; left: 2px; }
+  .sched-card .trig { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .sched-card .last-fired {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--ink);
+    border-top: 1px dashed var(--line);
+    padding-top: 8px;
+    display: flex; justify-content: space-between;
+  }
+  .sched-card .last-fired .link { color: var(--ink); text-decoration: underline; }
+
+  /* settings sections */
+  .settings-scroll { flex: 1; overflow: hidden; }
+  .settings-section { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .settings-section h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  .settings-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 10px; align-items: baseline; padding: 4px 0; font-size: 13px; }
+  .settings-row .label { color: var(--muted); }
+  .settings-row .val { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
+  .settings-row .ctrl { font-size: 11px; border: 1px solid var(--line); padding: 2px 8px; background: var(--bg); }
+  .settings-row .ctrl.danger { color: var(--voice); border-color: var(--voice); }
+
+  /* voice bar (replaces composer when voice on) */
+  .voice-bar {
+    border-top: 2px solid var(--voice);
+    padding: 12px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    background: var(--voice-bg);
+    flex-shrink: 0;
+  }
+  .voice-bar .mic-state {
+    display: flex; gap: 6px; align-items: center;
+    font-size: 12px; font-weight: 600; color: var(--voice);
+  }
+  .voice-bar .mic-state .dot.live { animation: pulse 1.2s infinite; }
+  .voice-bar .mic-state.muted { color: var(--muted); }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .waveform { display: flex; gap: 2px; align-items: center; height: 22px; overflow: hidden; }
+  .waveform .b { width: 3px; background: var(--voice); display: inline-block; }
+  .waveform.muted .b { background: var(--faded); }
+  .voice-bar .end {
+    border: 1px solid var(--voice);
+    color: var(--voice);
+    background: var(--bg);
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+  .msg.user.transcript {
+    background: var(--voice-bg);
+    border: 1px dashed var(--voice);
+    color: var(--ink);
+    font-style: italic;
+  }
+  .msg.user.transcript::before { content: '🎙 '; font-style: normal; }
+  .msg.assistant.speaking {
+    border: 1px solid var(--voice);
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+  .msg.assistant.speaking::before { content: '🔊 '; }
+
+  /* incoming-call screen (full takeover) */
+  .call-screen {
+    flex: 1;
+    display: flex; flex-direction: column;
+    background: linear-gradient(180deg, #2a2530 0%, #1a151c 100%);
+    color: var(--bg);
+    overflow: hidden;
+  }
+  .call-screen .who-area {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    padding: 0 28px;
+  }
+  .call-screen .label-top {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.6);
+  }
+  .call-screen .avatar {
+    width: 110px; height: 110px;
+    border: 2px solid var(--bg);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 48px;
+    margin-top: 30px;
+  }
+  .call-screen .name { font-size: 30px; font-weight: 600; }
+  .call-screen .sub { color: rgba(255,255,255,0.6); font-size: 13px; }
+  .call-screen .reason {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    padding: 12px 14px;
+    font-size: 13px;
+    border-radius: 4px;
+    margin: 0 12px;
+  }
+  .call-screen .reason .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 4px;
+  }
+  .call-screen .actions {
+    padding: 30px 36px 50px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .call-screen .btn {
+    width: 70px; height: 70px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    color: var(--bg);
+  }
+  .call-screen .btn.dismiss { background: var(--voice); }
+  .call-screen .btn.accept { background: var(--running); }
+  .call-screen .btn-label { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 6px; }
+  .call-screen .btn-wrap { display: flex; flex-direction: column; align-items: center; }
+
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- ─── 1. CHATS LIST ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">1</span><span class="desc">Chats — default landing</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="screen-head"><span class="title">Chats</span></div>
+      <div class="chat-list">
+        <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div><span class="when"></span></div>
+        <div class="row special"><span class="status running">★</span><div class="body"><div class="name">Voice</div></div><span class="when">live</span></div>
+        <div class="folder-head">bed-planner</div>
+        <div class="row in-folder"><span class="status running">●</span><div class="body"><div class="name">fix layout bug</div><div class="preview">checking the grid…</div></div><span class="when">2m</span></div>
+        <div class="row in-folder"><span class="status idle">·</span><div class="body"><div class="name">refactor api route</div><div class="preview">draft proposed</div></div><span class="when">12m</span></div>
+        <div class="folder-head">portfolio</div>
+        <div class="row in-folder"><span class="status waiting">!</span><div class="body"><div class="name">approve manifest write</div><div class="preview">approve write to manifest.json?</div></div><span class="when">4m</span></div>
+        <div class="folder-head">health-tracker</div>
+        <div class="row in-folder"><span class="status idle">·</span><div class="body"><div class="name">weekly summary script</div><div class="preview">tests passing</div></div><span class="when">38m</span></div>
+        <div class="folder-head">freeagent</div>
+        <div class="row in-folder read"><span class="status read">✓</span><div class="body"><div class="name">monthly close</div><div class="preview">draft invoices ready</div></div><span class="when">1h</span></div>
+        <div class="arch-toggle">▸ archived (47)</div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tab-bar">
+        <div class="tab active"><span class="icon">💬</span><span>Chats</span></div>
+        <div class="tab"><span class="icon">★</span><span>Manager</span></div>
+        <div class="tab"><span class="icon">⚙</span><span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ─── 2. CHAT DETAIL ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">2</span><span class="desc">Chat detail — Claude-Code-style stream + permission card</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name">fix layout bug</div>
+        </div>
+      </div>
+      <div class="stream">
+        <div class="msg user">fix the layout bug — the right column overlaps the editor on narrow screens.</div>
+
+        <div class="msg assistant">I'll read the layout file first.</div>
+
+        <div class="tool-card">
+          <span class="icon">📄</span>
+          <div class="body">
+            <div class="name">Read <span class="args">src/layout.ts</span></div>
+            <div class="result">142 lines</div>
+          </div>
+          <span class="chevron">▸</span>
+        </div>
+
+        <div class="msg assistant">Found it — the grid has a fixed 400px column. Switching to minmax. Need your OK to write.</div>
+
+        <div class="perm-card">
+          <div class="head">Edit src/layout.ts</div>
+          <div class="diff">
+            <span class="del">−   grid: '400px 1fr',</span>
+            <span class="add">+   grid: 'minmax(280px, 1fr) 1fr',</span>
+          </div>
+          <div class="question">Do you want to proceed?</div>
+          <div class="opts">
+            <div class="opt yes"><span class="num">1</span><span>Yes</span></div>
+            <div class="opt"><span class="num">2</span><span>Yes, allow all edits during this session</span></div>
+            <div class="opt no"><span class="num">3</span><span>No, and tell Claude what to do differently</span><span class="esc-hint">esc</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="input">Type a message…</div>
+        <span class="icon-btn">🎙</span>
+        <span class="icon-btn send">▸</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ─── 3. NEW CHAT ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">3</span><span class="desc">New chat — folder pill defaulted to MRU, composer focused</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <span class="folder-pill">~/projects/bed-planner<span class="caret">▾</span></span>
+        </div>
+      </div>
+      <div class="stream" style="justify-content: center; align-items: center; color: var(--faded); font-style: italic; font-size: 13px;">
+        &nbsp;
+      </div>
+      <div class="composer">
+        <div class="input focused">Type your first message…</div>
+        <span class="icon-btn">🎙</span>
+        <span class="icon-btn send">▸</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ─── 4. SCHEDULES (sub-screen of Settings) ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">4</span><span class="desc">Schedules — sub-screen of Settings · last-fired deep-links to spawned chat in archive</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">Settings</div>
+          <div class="name">Schedules</div>
+        </div>
+      </div>
+      <div class="chat-list" style="padding: 8px 0;">
+        <div class="sched-card">
+          <div class="row1"><span class="name">bus-watch</span><span class="toggle"></span></div>
+          <div class="trig">weekdays at 8:57 → spawn · skill <code>bus-watch</code></div>
+          <div class="last-fired"><span>last ran <a class="link">today 08:57</a></span></div>
+        </div>
+        <div class="sched-card">
+          <div class="row1"><span class="name">weekly newsletter</span><span class="toggle"></span></div>
+          <div class="trig">Sundays at 9am → spawn · skill <code>weekly-newsletter</code></div>
+          <div class="last-fired"><span>last ran <a class="link">Sun 09:00</a></span></div>
+        </div>
+        <div class="sched-card">
+          <div class="row1"><span class="name">github merge alerts</span><span class="toggle"></span></div>
+          <div class="trig">GitHub webhook → message · prompt → Manager</div>
+          <div class="last-fired"><span>last ran <a class="link">12m ago</a></span></div>
+        </div>
+        <div class="sched-card">
+          <div class="row1"><span class="name">bin day reminder</span><span class="toggle"></span></div>
+          <div class="trig">Mondays at 7pm → spawn · skill <code>bins-reminder</code></div>
+          <div class="last-fired"><span>last ran <a class="link">Mon 19:00</a></span></div>
+        </div>
+        <div class="sched-card">
+          <div class="row1"><span class="name" style="color: var(--faded);">old health digest</span><span class="toggle off"></span></div>
+          <div class="trig" style="color: var(--faded);">every day at 8am → spawn · skill <code>health-digest</code></div>
+          <div class="last-fired"><span>last ran <a class="link" style="color: var(--faded);">2 weeks ago</a></span></div>
+        </div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tab-bar">
+        <div class="tab"><span class="icon">💬</span><span>Chats</span></div>
+        <div class="tab"><span class="icon">★</span><span>Manager</span></div>
+        <div class="tab active"><span class="icon">⚙</span><span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ─── 5. MANAGER ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">5</span><span class="desc">Manager — own tab, jumps to the special thread</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="screen-head"><span class="title">Manager</span></div>
+      <div class="stream">
+        <div class="msg user">what's going on across my chats?</div>
+        <div class="msg assistant">3 active. bed-planner has fix-layout-bug running (waiting on a permission). portfolio's chat is paused on an approval. health-tracker just finished tests, no action needed.</div>
+        <div class="msg user">remind the bed-planner one to also run the test suite when it's done.</div>
+        <div class="msg assistant">Done — sent to that chat.</div>
+        <div class="tool-card"><span class="icon">→</span><div class="body"><div class="name">patch_send_to <span class="args">c_91FW2</span></div><div class="result">"after the layout fix lands, run npm test"</div></div><span class="chevron">▸</span></div>
+        <div class="msg user">schedule a weekly check-in every Friday 5pm to summarise the week.</div>
+        <div class="msg assistant">Scheduled. Friday 5pm → message Manager → "summarise the week".</div>
+        <div class="tool-card"><span class="icon">⏰</span><div class="body"><div class="name">patch_job_create <span class="args">"weekly check-in"</span></div><div class="result">trigger: Fridays at 5pm</div></div><span class="chevron">▸</span></div>
+      </div>
+      <div class="composer">
+        <div class="input">Type a message…</div>
+        <span class="icon-btn">🎙</span>
+        <span class="icon-btn send">▸</span>
+      </div>
+      <div class="tab-bar">
+        <div class="tab"><span class="icon">💬</span><span>Chats</span></div>
+        <div class="tab active"><span class="icon">★</span><span>Manager</span></div>
+        <div class="tab"><span class="icon">⚙</span><span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ─── 6. SETTINGS ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">6</span><span class="desc">Settings — same sections as web, single column</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="screen-head"><span class="title">Settings</span></div>
+      <div class="settings-scroll">
+
+        <div class="settings-section">
+          <h3>account</h3>
+          <div class="settings-row"><span class="label">email</span><span class="val">tom.chambers@gmail.com</span><span></span></div>
+          <div class="settings-row"><span class="label"></span><span></span><span class="ctrl danger">sign out</span></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>automation</h3>
+          <div class="settings-row" style="grid-template-columns: 1fr auto;"><span style="font-size: 14px;">Schedules</span><span style="font-size: 16px; color: var(--muted);">→</span></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>claude subscription</h3>
+          <div class="settings-row"><span class="label">connected</span><span class="val">Claude Pro</span><span class="ctrl">disconnect</span></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>surfaces</h3>
+          <div class="settings-row"><span class="label" style="color: var(--running);">●</span><span class="val">this iPhone</span><span></span></div>
+          <div class="settings-row"><span class="label" style="color: var(--running);">●</span><span class="val">Mac · web</span><span class="ctrl">remove</span></div>
+          <div class="settings-row"><span class="label" style="color: var(--running);">●</span><span class="val">kitchen voice device</span><span class="ctrl">remove</span></div>
+          <div class="settings-row"><span class="label"></span><span></span><span class="ctrl">+ add device</span></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>integration keys</h3>
+          <div class="settings-row"><span class="label">TELEGRAM</span><span class="val" style="color: var(--muted);">••••</span><span class="ctrl">edit</span></div>
+          <div class="settings-row"><span class="label">GITHUB</span><span class="val" style="color: var(--muted);">••••</span><span class="ctrl">edit</span></div>
+          <div class="settings-row"><span class="label">TODOIST</span><span class="val" style="color: var(--muted);">— not set —</span><span class="ctrl">add</span></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>daemon</h3>
+          <div class="settings-row"><span class="label">status</span><span class="val"><span style="color: var(--running);">● connected</span></span><span></span></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>patch root</h3>
+          <div class="settings-row"><span class="label">folder</span><span class="val">~/projects/portfolio</span><span class="ctrl">change</span></div>
+        </div>
+
+      </div>
+      <div class="tab-bar">
+        <div class="tab"><span class="icon">💬</span><span>Chats</span></div>
+        <div class="tab"><span class="icon">★</span><span>Manager</span></div>
+        <div class="tab active"><span class="icon">⚙</span><span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ─── 7. VOICE — listening ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">7</span><span class="desc">Voice active — listening (mic live)</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name">fix layout bug</div>
+        </div>
+      </div>
+      <div class="stream">
+        <div class="msg user">fix the layout bug.</div>
+        <div class="msg assistant">Found it — switching the grid to minmax. Should I run the tests after?</div>
+        <div class="msg user transcript">yeah do that and let me know if anything—</div>
+      </div>
+      <div class="voice-bar">
+        <span class="mic-state"><span class="dot live">●</span>listening</span>
+        <span class="waveform">
+          <span class="b" style="height: 6px"></span><span class="b" style="height: 11px"></span><span class="b" style="height: 18px"></span><span class="b" style="height: 22px"></span><span class="b" style="height: 14px"></span><span class="b" style="height: 8px"></span><span class="b" style="height: 16px"></span><span class="b" style="height: 21px"></span><span class="b" style="height: 13px"></span><span class="b" style="height: 7px"></span><span class="b" style="height: 19px"></span><span class="b" style="height: 14px"></span><span class="b" style="height: 22px"></span><span class="b" style="height: 18px"></span><span class="b" style="height: 11px"></span><span class="b" style="height: 17px"></span><span class="b" style="height: 19px"></span><span class="b" style="height: 11px"></span>
+        </span>
+        <span class="end">end</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ─── 8. VOICE — agent speaking ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">8</span><span class="desc">Voice active — agent speaking (tap bubble to silence)</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name">fix layout bug</div>
+        </div>
+      </div>
+      <div class="stream">
+        <div class="msg user">fix the layout bug.</div>
+        <div class="msg assistant">Found it — switching the grid to minmax. Should I run the tests after?</div>
+        <div class="msg user">yeah do that and let me know if anything fails.</div>
+        <div class="msg assistant speaking">On it. Switching the grid now and kicking off the test suite — about a minute.</div>
+      </div>
+      <div class="voice-bar">
+        <span class="mic-state muted"><span class="dot">○</span>muted (agent)</span>
+        <span class="waveform muted">
+          <span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span><span class="b" style="height: 4px"></span>
+        </span>
+        <span class="end">end</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ─── 9. INCOMING CALL ─── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">9</span><span class="desc">Manager incoming call — Android-native screen via ConnectionService</span></div>
+    <div class="phone-frame">
+      <div class="status-bar" style="color: rgba(255,255,255,0.85); background: #1a151c;"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="call-screen">
+        <div class="who-area">
+          <div class="label-top">incoming patch call</div>
+          <div class="avatar">★</div>
+          <div style="text-align: center;">
+            <div class="name">Manager</div>
+            <div class="sub">special thread · voice session</div>
+          </div>
+          <div class="reason">
+            <div class="label">why it's calling</div>
+            Build of <code>health-tracker</code> failed in CI. Manager wants your call to decide whether to retry or roll back.
+          </div>
+        </div>
+        <div class="actions">
+          <div class="btn-wrap">
+            <div class="btn dismiss">✕</div>
+            <div class="btn-label">Dismiss</div>
+          </div>
+          <div class="btn-wrap">
+            <div class="btn accept">📞</div>
+            <div class="btn-label">Accept</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

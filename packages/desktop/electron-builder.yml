@@ -1,0 +1,69 @@
+appId: io.github.tomchambers2.patch
+productName: Patch
+copyright: © Tom Chambers
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - package.json
+  # Tray template icon — main.ts resolves it at build/trayIconTemplate.png
+  # inside the asar. Without these globs it's absent and createTray throws on
+  # every launch (no menubar icon). NO FALLBACK: the asset must ship.
+  - build/trayIconTemplate.png
+  - build/trayIconTemplate@2x.png
+# What "On this Mac" runs with nothing installed: the Patch server release and the
+# host build for this Mac (scripts/stage-resources.cjs puts them in build/staged).
+extraResources:
+  - from: build/staged/server
+    to: server
+  - from: build/staged/daemon
+    to: daemon
+  # Meeting mode's native audio helper (scripts/build-native.cjs): system audio via
+  # a Core Audio tap, and noticing which apps have the mic open.
+  - from: build/native/patch-audio
+    to: bin/patch-audio
+mac:
+  category: public.app-category.developer-tools
+  # App icon = the web favicon (build/icon.png, rendered 1024² from
+  # packages/web/public/favicon.svg). electron-builder generates the .icns.
+  icon: build/icon.png
+  # Only what the deploy actually publishes: the arm64 zip electron-updater pulls
+  # out of latest-mac.yml. The dmg and the x64 slice were built every time and
+  # shipped never — and `hdiutil` cannot attach a disk image from the ssh session
+  # the deploy runs in ("Resource temporarily unavailable"), so the dmg failed the
+  # whole build for an artifact nothing consumes.
+  target:
+    - target: zip
+      arch: [arm64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  # Group 19: codesigning. The values come from env at build time:
+  #   APPLE_ID                         developer Apple-ID
+  #   APPLE_APP_SPECIFIC_PASSWORD      app-specific password for notarytool
+  #   APPLE_TEAM_ID                    Team ID
+  #   CSC_LINK                         path or base64 .p12 cert
+  #   CSC_KEY_PASSWORD                 .p12 password
+  # electron-builder reads these directly; we don't have to surface them in
+  # the YAML. NO FALLBACK: missing env at `dist` time will fail loudly.
+  notarize: false # we run notarytool ourselves via `afterSign` (scripts/notarize.cjs)
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # extraResources are not signed with the app unless named; the helper must be,
+  # or hardened runtime and notarization refuse it.
+  binaries:
+    - Contents/Resources/bin/patch-audio
+  # The system-audio permission prompt's wording (Meeting mode hears the call).
+  extendInfo:
+    NSAudioCaptureUsageDescription: Patch hears your meetings' audio so it can take notes.
+afterSign: scripts/notarize.cjs
+# Update feed. NO server address is built in (spec/05 § Desktop first run): the
+# feed is the server this app is connected to, set at launch (main.ts,
+# autoUpdater.setFeedURL). electron-builder still needs a generic provider to
+# write latest-mac.yml and app-update.yml; the url below is a placeholder that
+# is replaced before the first check and resolves nowhere.
+publish:
+  provider: generic
+  url: https://updates.invalid/api/desktop/
+  channel: latest
+# Win/Linux targets stay deferred; the build matrix flips them on later.

@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "coverageAnalysis": "perTest",
+  "ignoreStatic": true,
+  "mutate": ["src/serverLink.ts", "src/eventBuffer.ts", "src/rate-limit.ts", "src/chatState.ts", "src/titleGen.ts"],
+  "reporters": ["clear-text", "progress"],
+  "concurrency": 6,
+  "timeoutMS": 20000,
+  "clearTextReporter": { "maxTestsToLog": 0, "reportTests": false, "reportMutants": false }
+}

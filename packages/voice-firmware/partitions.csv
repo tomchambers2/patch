@@ -1,0 +1,21 @@
+# ESP-IDF partition table for patch-voice-device on ESP32-S3 (16 MB flash).
+# Dual-bank OTA: ota_0 + ota_1 each ~4.6 MB (the app is ~1.7 MB, so plenty of
+# headroom for signed images). nvs_keys is reserved for encrypted NVS (surface
+# JWT lives in `patch.cred`).
+#
+# The wake-word engine is microWakeWord (TFLite-Micro): its ~52 KB hey_jarvis
+# model FlatBuffer is EMBED_FILES'd into the app image itself, so — unlike the
+# old esp-sr WakeNet path — no flash model partition is needed. The trailing
+# `model` SPIFFS partition is kept (same offsets) only so that units already
+# provisioned under the previous layout keep their NVS / OTA offsets stable
+# across this firmware swap; it is otherwise unused and may be reclaimed in a
+# future repartition.
+#
+# Name,     Type, SubType,  Offset,    Size,     Flags
+nvs,        data, nvs,      0x9000,    0x6000,
+otadata,    data, ota,      0xf000,    0x2000,
+phy_init,   data, phy,      0x11000,   0x1000,
+nvs_keys,   data, nvs_keys, 0x12000,   0x1000,    encrypted
+ota_0,      app,  ota_0,    0x20000,   0x4A0000,
+ota_1,      app,  ota_1,    0x4C0000,  0x4A0000,
+model,      data, spiffs,   0x960000,  0x500000,

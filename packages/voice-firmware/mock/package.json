@@ -1,0 +1,9 @@
+{
+  "name": "@patch/voice-firmware-mock",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mock WSS harness pretending to be a patch voice device. See README.md.",
+  "scripts": {
+    "mock": "uv run --project . python -m mock_voice_device"
+  }
+}

@@ -1,0 +1,42 @@
+# Build outputs + deps rebuilt inside the image.
+node_modules
+**/node_modules
+dist
+**/dist
+# tsc -b incremental state. MUST be excluded alongside dist/: if a stale
+# .tsbuildinfo from a developer's working tree is copied in while dist/ is not,
+# `tsc -b` sees "already built" and emits nothing, leaving packages/*/dist
+# empty — and the web vite build then fails to resolve @patch/wire. Excluding
+# it keeps the image build reproducible from a clean checkout (spec/11).
+**/*.tsbuildinfo
+.turbo
+.vite
+coverage
+.pnpm-store
+
+# Python voice sidecar venvs/caches — rebuilt by `uv venv` in the image.
+**/.venv
+**/__pycache__
+**/*.pyc
+
+# Local dev + model artifacts (mounted at runtime, not baked in).
+.dev-data
+.dev-data-*
+.tmp
+models
+*.log
+.DS_Store
+
+# Runtime data written BY the containers (root-owned) — must not be in the build
+# context (unreadable files break `docker build`'s context scan) and must never
+# be baked into an image.
+data
+deploy/data
+**/.patch
+
+# Published artifacts served BY the box (daemon tarballs, APKs, desktop builds).
+# They live under the deploy dir on the host and are 2.7 GB and growing: pulling
+# them into the build context copied every one of them into the builder for a
+# `COPY . .`, which is what filled the disk and broke `pnpm ship server` with
+# "no space left on device" — while building nothing that needs them.
+deploy/downloads

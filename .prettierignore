@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+data/
+models/
+pnpm-lock.yaml
+design/
+apps/mobile/vendor/

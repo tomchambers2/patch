@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0c0f;
+    --panel: #14151a;
+    --panel-2: #1a1c22;
+    --panel-hover: #1f2128;
+    --border: #23252d;
+    --border-strong: #2e313b;
+    --text-1: #edeef2;
+    --text-2: #a0a4ae;
+    --text-3: #61656f;
+    --text-mute: #44474f;
+    --accent: #4ade80;
+    --accent-dim: #15803d;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --violet: #a78bfa;
+    --pink: #f472b6;
+    --tool: #2a3040;
+    --user-bubble: #1d2230;
+    --bg-tool-result: #11141a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text-1); font-family: 'Inter', system-ui, sans-serif; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  ::selection { background: rgba(74, 222, 128, 0.25); }
+
+  /* shell */
+  .app {
+    display: grid;
+    grid-template-columns: 280px 1fr 400px;
+    grid-template-rows: 44px 1fr;
+    height: 100vh;
+  }
+  .topbar {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+  .topbar .logo { font-weight: 700; letter-spacing: -0.01em; font-size: 14px; color: var(--text-1); display: flex; align-items: center; gap: 7px; }
+  .topbar .logo::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: linear-gradient(135deg, var(--accent), var(--blue)); display: inline-block; }
+  .topbar .daemon-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px; border-radius: 999px; background: var(--panel-2);
+    border: 1px solid var(--border); color: var(--text-2); font-size: 12px;
+  }
+  .topbar .daemon-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .topbar .search {
+    flex: 1; max-width: 420px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 10px; color: var(--text-2); font-size: 12.5px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .topbar .search .kbd { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-3); border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; }
+  .topbar .right { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--text-2); }
+  .topbar .avatar { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, #f472b6, #a78bfa); }
+
+  /* sidebar */
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 10px 0 16px;
+  }
+  .sb-section { padding: 12px 14px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); display: flex; align-items: center; justify-content: space-between; }
+  .sb-section .badge { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-size: 10px; color: var(--text-2); border: 1px solid var(--border); }
+  .sb-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 6px 14px; cursor: pointer; user-select: none;
+    color: var(--text-2); font-size: 13.2px; position: relative;
+  }
+  .sb-item:hover { background: var(--panel-2); color: var(--text-1); }
+  .sb-item.active { background: var(--panel-2); color: var(--text-1); }
+  .sb-item.active::before { content: ''; position: absolute; left: 0; top: 2px; bottom: 2px; width: 2px; background: var(--accent); border-radius: 0 2px 2px 0; }
+  .sb-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-item .icon { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); flex-shrink: 0; }
+  .sb-item .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .sb-item .dot.run { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .sb-item .dot.idle { background: var(--text-mute); }
+  .sb-item .dot.wait { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .sb-item .dot.err { background: var(--red); }
+  .sb-folder {
+    padding: 4px 14px 2px;
+    color: var(--text-3);
+    font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 6px;
+  }
+  .sb-folder .chev { color: var(--text-mute); font-size: 10px; }
+  .sb-pinned-icon {
+    width: 18px; height: 18px; border-radius: 4px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-2); font-size: 11px; flex-shrink: 0;
+  }
+  .sb-bottom {
+    margin-top: auto; padding: 14px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: center;
+    font-size: 12.5px; color: var(--text-2);
+  }
+  .sb-link { padding: 5px 10px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .sb-link:hover { background: var(--panel-2); color: var(--text-1); }
+  .sb-link .count { background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; font-size: 10.5px; color: var(--text-3); }
+
+  /* main column */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .chat-header {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 22px;
+    display: flex; align-items: center; gap: 14px;
+    background: var(--bg);
+  }
+  .chat-header .title { font-size: 15px; font-weight: 600; }
+  .chat-header .path { color: var(--text-3); font-size: 12px; font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+  .chat-header .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px; border-radius: 999px; background: rgba(74, 222, 128, 0.08);
+    border: 1px solid rgba(74, 222, 128, 0.25); color: var(--accent); font-size: 12px;
+  }
+  .chat-header .status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .chat-header .actions { margin-left: auto; display: flex; gap: 6px; }
+  .icon-btn {
+    width: 30px; height: 30px; border-radius: 6px;
+    background: transparent; border: 1px solid transparent;
+    color: var(--text-2); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:hover { background: var(--panel); border-color: var(--border); color: var(--text-1); }
+  .icon-btn.active { background: var(--panel); border-color: var(--border); color: var(--accent); }
+
+  .messages {
+    flex: 1; overflow-y: auto;
+    padding: 24px 0;
+  }
+  .msg { padding: 0 24px; margin-bottom: 18px; max-width: 920px; }
+  .msg-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; color: var(--text-3); margin-bottom: 6px;
+  }
+  .msg-meta .role { font-weight: 600; color: var(--text-2); font-size: 12px; }
+  .msg-meta .role.user { color: var(--blue); }
+  .msg-meta .role.assistant { color: var(--text-1); }
+  .msg-meta .role.tool { color: var(--violet); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+  .msg-body { color: var(--text-1); font-size: 14px; line-height: 1.55; }
+  .msg.user .msg-body {
+    background: var(--user-bubble); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+  }
+  .msg .pill { font-size: 10.5px; color: var(--text-3); border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; }
+
+  /* tool call card */
+  .tool-card {
+    background: var(--bg-tool-result); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; margin-top: 4px;
+  }
+  .tool-card .tc-head {
+    padding: 7px 12px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tool-card .tc-head .toolname { color: var(--violet); font-weight: 600; }
+  .tool-card .tc-head .arg { color: var(--text-2); }
+  .tool-card .tc-head .chev { margin-left: auto; color: var(--text-3); cursor: pointer; }
+  .tool-card .tc-body {
+    padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--text-2); white-space: pre-wrap;
+  }
+  .tool-card.collapsed .tc-body { display: none; }
+
+  /* permission prompt */
+  .perm {
+    border: 1px solid var(--amber); background: rgba(251, 191, 36, 0.05);
+    border-radius: 8px; padding: 12px 14px; margin: 4px 0;
+  }
+  .perm .perm-head { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--amber); font-size: 13px; margin-bottom: 6px; }
+  .perm .perm-detail { color: var(--text-2); font-size: 13px; margin-bottom: 10px; font-family: 'JetBrains Mono', monospace; }
+  .perm .perm-actions { display: flex; gap: 8px; }
+  .btn {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text-1); font-size: 12.5px; cursor: pointer;
+    font-weight: 500;
+  }
+  .btn.primary { background: var(--accent); color: #0b0c0f; border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.05); }
+  .btn:hover { background: var(--panel-2); }
+
+  /* composer */
+  .composer {
+    border-top: 1px solid var(--border);
+    padding: 14px 22px; background: var(--bg);
+  }
+  .composer .input-wrap {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+    display: flex; align-items: flex-end; gap: 10px;
+    max-width: 920px;
+    transition: border-color 120ms;
+  }
+  .composer .input-wrap:focus-within { border-color: var(--border-strong); }
+  .composer textarea {
+    flex: 1; background: transparent; border: 0; outline: 0;
+    resize: none; color: var(--text-1); font-family: inherit; font-size: 14px; line-height: 1.5;
+    min-height: 22px; max-height: 200px;
+  }
+  .composer .composer-actions { display: flex; gap: 6px; align-items: center; }
+  .mic-btn {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--text-2); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .mic-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+  .send-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--accent); color: #0b0c0f; border: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .send-btn:hover { filter: brightness(1.05); }
+  .composer-meta { display: flex; gap: 10px; align-items: center; margin-top: 6px; padding: 0 4px; font-size: 11px; color: var(--text-3); }
+  .composer-meta .kbd { font-family: 'JetBrains Mono', monospace; border: 1px solid var(--border); padding: 0px 5px; border-radius: 3px; color: var(--text-3); }
+
+  /* right rail editor */
+  .editor-rail {
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    min-width: 0;
+  }
+  .er-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px;
+  }
+  .er-header .filename { font-family: 'JetBrains Mono', monospace; color: var(--text-1); }
+  .er-header .filepath { font-family: 'JetBrains Mono', monospace; color: var(--text-3); font-size: 11px; }
+  .er-header .ro { margin-left: auto; font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
+  .er-tabs {
+    display: flex; gap: 2px; border-bottom: 1px solid var(--border);
+    padding: 0 8px; font-size: 12px;
+  }
+  .er-tab {
+    padding: 7px 12px; cursor: pointer; color: var(--text-3);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .er-tab.active { color: var(--text-1); border-bottom-color: var(--accent); }
+  .er-tab:hover { color: var(--text-1); }
+  .editor {
+    flex: 1; overflow: auto;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    line-height: 1.55; padding: 12px 0;
+  }
+  .editor .line {
+    display: grid; grid-template-columns: 44px 16px 1fr;
+    padding: 0 14px 0 0;
+  }
+  .editor .ln { text-align: right; padding-right: 10px; color: var(--text-mute); user-select: none; }
+  .editor .gutter { color: var(--text-3); }
+  .editor .line.add { background: rgba(74, 222, 128, 0.08); }
+  .editor .line.add .gutter { color: var(--accent); }
+  .editor .line.del { background: rgba(248, 113, 113, 0.07); }
+  .editor .line.del .gutter { color: var(--red); }
+  .editor .line.del .code { color: var(--text-2); text-decoration: line-through; opacity: 0.7; }
+  .editor .line.hunk { color: var(--violet); padding: 4px 14px; }
+  .editor .code .kw { color: var(--violet); }
+  .editor .code .str { color: #fcd34d; }
+  .editor .code .fn { color: var(--blue); }
+  .editor .code .com { color: var(--text-3); font-style: italic; }
+  .editor .code .num { color: var(--pink); }
+
+  /* svg icon helpers */
+  .ic { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .ic-lg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- topbar -->
+  <header class="topbar">
+    <div class="logo">patch</div>
+    <div class="daemon-pill"><span class="dot"></span> daemon online <span style="color: var(--text-3); margin-left: 4px;">· hetzner-ccx22</span></div>
+    <div class="search">
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span>Search chats, jobs, files</span>
+      <span class="kbd">⌘K</span>
+    </div>
+    <div class="right">
+      <span style="font-size: 12px;">Tom</span>
+      <div class="avatar"></div>
+    </div>
+  </header>
+
+  <!-- sidebar -->
+  <aside class="sidebar">
+    <div class="sb-section">Pinned <span class="badge">3</span></div>
+    <div class="sb-item">
+      <span class="sb-pinned-icon" style="background: rgba(96, 165, 250, 0.12); border-color: rgba(96, 165, 250, 0.3); color: var(--blue);">M</span>
+      <span class="name">Manager</span>
+      <span class="dot idle"></span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-pinned-icon" style="background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.3); color: var(--violet);">T</span>
+      <span class="name">Telegram</span>
+      <span class="dot idle"></span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-pinned-icon" style="background: rgba(244, 114, 182, 0.12); border-color: rgba(244, 114, 182, 0.3); color: var(--pink);">V</span>
+      <span class="name">Voice</span>
+      <span class="dot idle"></span>
+    </div>
+
+    <div class="sb-folder"><span class="chev">▾</span> ~/projects/bus-router</div>
+    <div class="sb-item active">
+      <span class="dot run"></span>
+      <span class="name">Bus route planning</span>
+      <span class="pill mono" style="font-size: 10px; color: var(--text-3); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px;">2m</span>
+    </div>
+    <div class="sb-item">
+      <span class="dot idle"></span>
+      <span class="name">Refactor stop API</span>
+    </div>
+    <div class="sb-item">
+      <span class="dot idle"></span>
+      <span class="name">Test fixtures for tfl</span>
+    </div>
+
+    <div class="sb-folder"><span class="chev">▾</span> ~/projects/portfolio</div>
+    <div class="sb-item">
+      <span class="dot run"></span>
+      <span class="name">Add jobs UI</span>
+    </div>
+    <div class="sb-item">
+      <span class="dot wait"></span>
+      <span class="name">Voice device firmware</span>
+    </div>
+    <div class="sb-item">
+      <span class="dot idle"></span>
+      <span class="name">Patch spec polish</span>
+    </div>
+
+    <div class="sb-folder"><span class="chev">▾</span> ~/jobs/news-briefing</div>
+    <div class="sb-item">
+      <span class="dot idle"></span>
+      <span class="name">Morning briefing 04-29</span>
+    </div>
+    <div class="sb-item">
+      <span class="dot idle"></span>
+      <span class="name" style="color: var(--text-3);">Morning briefing 04-28</span>
+    </div>
+
+    <div class="sb-folder"><span class="chev">▾</span> ~/jobs/ha-update</div>
+    <div class="sb-item">
+      <span class="dot idle"></span>
+      <span class="name">Nightly update 04-29 ✓</span>
+    </div>
+
+    <div class="sb-bottom">
+      <div class="sb-link">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+        Jobs <span class="count">7</span>
+      </div>
+      <div class="sb-link" style="margin-left: auto;">
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <!-- main -->
+  <section class="main">
+    <header class="chat-header">
+      <div>
+        <div class="title">Bus route planning</div>
+        <div class="path">~/projects/bus-router · sonnet-4-6 · 14 turns</div>
+      </div>
+      <span class="status"><span class="dot"></span> running</span>
+      <div class="actions">
+        <button class="icon-btn" title="Voice">
+          <svg class="ic-lg" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+        <button class="icon-btn active" title="Editor open">
+          <svg class="ic-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        </button>
+        <button class="icon-btn" title="More">
+          <svg class="ic-lg" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="messages">
+      <!-- user msg -->
+      <div class="msg user">
+        <div class="msg-meta">
+          <span class="role user">tom</span>
+          <span>· 14:02</span>
+          <span class="pill">app</span>
+        </div>
+        <div class="msg-body">
+          Pull next bus from stop 12345 every 30 seconds for the next hour and ping me when one's under 5 minutes away. Keep the chat open so I can see the polls.
+        </div>
+      </div>
+
+      <!-- assistant -->
+      <div class="msg">
+        <div class="msg-meta">
+          <span class="role assistant">claude</span>
+          <span>· 14:02</span>
+        </div>
+        <div class="msg-body">
+          I'll set up a 30-second poll against the TfL API for stop 12345 and use <code class="mono" style="background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 12.5px;">CronCreate</code> with <code class="mono" style="background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 12.5px;">durable: false</code> so it stays scoped to this session. Let me verify the stop ID first.
+        </div>
+      </div>
+
+      <!-- tool call -->
+      <div class="msg">
+        <div class="msg-meta">
+          <span class="role tool">Bash</span>
+          <span>· 14:02</span>
+          <span class="pill">200 OK · 184ms</span>
+        </div>
+        <div class="tool-card">
+          <div class="tc-head">
+            <span class="toolname">Bash</span>
+            <span class="arg">curl -s 'https://api.tfl.gov.uk/StopPoint/490012345/Arrivals'</span>
+            <span class="chev">▾</span>
+          </div>
+          <div class="tc-body">[
+  { "lineName": "76", "destinationName": "Tottenham Court Road",
+    "timeToStation": 412, "expectedArrival": "2026-04-29T14:09:14Z" },
+  { "lineName": "73", "destinationName": "Victoria",
+    "timeToStation": 720, "expectedArrival": "2026-04-29T14:14:02Z" },
+  …</div>
+        </div>
+      </div>
+
+      <!-- assistant -->
+      <div class="msg">
+        <div class="msg-meta">
+          <span class="role assistant">claude</span>
+          <span>· 14:02</span>
+        </div>
+        <div class="msg-body">
+          Stop 12345 is valid (route 76, 73, others). Setting up a 30s poll for the next hour with a <code class="mono" style="background: var(--panel); padding: 1px 5px; border-radius: 3px; font-size: 12.5px;">patch_notify</code> trigger when any arrival drops under 5 minutes.
+        </div>
+      </div>
+
+      <!-- tool call -->
+      <div class="msg">
+        <div class="msg-meta">
+          <span class="role tool">CronCreate</span>
+          <span>· 14:02</span>
+        </div>
+        <div class="tool-card">
+          <div class="tc-head">
+            <span class="toolname">CronCreate</span>
+            <span class="arg">expression="*/30 * * * * *" durable=false maxRuns=120</span>
+            <span class="chev">▾</span>
+          </div>
+          <div class="tc-body">message: "check arrivals at stop 12345; if any under 5 min, call patch_notify(channel: 'push', priority: 'urgent', message: '{line} arriving in {N}m')"</div>
+        </div>
+      </div>
+
+      <!-- permission prompt (active) -->
+      <div class="msg">
+        <div class="msg-meta">
+          <span class="role tool">permission</span>
+          <span>· awaiting</span>
+        </div>
+        <div class="perm">
+          <div class="perm-head">
+            <svg class="ic-lg" viewBox="0 0 24 24"><path d="M12 9v4M12 17h0M10.3 3.7 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0z"/></svg>
+            Allow <span class="mono">patch_notify</span> when arrivals drop under 5 min?
+          </div>
+          <div class="perm-detail">channel: push · priority: urgent · scope: this chat (60 min)</div>
+          <div class="perm-actions">
+            <button class="btn primary">Allow once</button>
+            <button class="btn">Allow for this chat</button>
+            <button class="btn" style="color: var(--red); border-color: rgba(248, 113, 113, 0.3);">Deny</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- composer -->
+    <div class="composer">
+      <div class="input-wrap">
+        <textarea rows="1" placeholder="Reply… (⏎ to send · ⇧⏎ for newline)"></textarea>
+        <div class="composer-actions">
+          <button class="mic-btn" title="Voice">
+            <svg class="ic-lg" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button class="send-btn" title="Send">
+            <svg class="ic-lg" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="composer-meta">
+        <span>focus-follow voice → this chat</span>
+        <span style="margin-left: auto;">@<span class="kbd">stop</span> to stop · <span class="kbd">/spawn</span> to fork</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- right rail editor -->
+  <aside class="editor-rail">
+    <div class="er-header">
+      <span class="filename">poller.ts</span>
+      <span class="filepath">~/projects/bus-router</span>
+      <span class="ro"><span style="width: 6px; height: 6px; background: var(--amber); border-radius: 50%; display: inline-block;"></span> read-only · agent active</span>
+    </div>
+    <div class="er-tabs">
+      <div class="er-tab active">poller.ts</div>
+      <div class="er-tab">README.md</div>
+      <div class="er-tab" style="color: var(--text-mute);">Diff <span style="background: var(--accent-dim); color: #d4f8e0; padding: 0 5px; border-radius: 3px; font-size: 10px; margin-left: 4px;">+12</span></div>
+    </div>
+    <div class="editor">
+      <div class="line hunk"><span></span><span></span><span class="code">@@ -14,9 +14,21 @@ async function poll(stopId: string)</span></div>
+      <div class="line"><span class="ln">14</span><span class="gutter"> </span><span class="code"><span class="kw">const</span> <span class="fn">poll</span> = <span class="kw">async</span> (<span class="num">stopId</span>: <span class="kw">string</span>) => {</span></div>
+      <div class="line"><span class="ln">15</span><span class="gutter"> </span><span class="code">  <span class="kw">const</span> res = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">`/StopPoint/${stopId}/Arrivals`</span>);</span></div>
+      <div class="line"><span class="ln">16</span><span class="gutter"> </span><span class="code">  <span class="kw">const</span> arrivals = <span class="kw">await</span> res.<span class="fn">json</span>();</span></div>
+      <div class="line del"><span class="ln">17</span><span class="gutter">−</span><span class="code">  <span class="kw">return</span> arrivals;</span></div>
+      <div class="line add"><span class="ln">17</span><span class="gutter">+</span><span class="code">  <span class="kw">const</span> imminent = arrivals.<span class="fn">filter</span>(a => a.timeToStation &lt; <span class="num">300</span>);</span></div>
+      <div class="line add"><span class="ln">18</span><span class="gutter">+</span><span class="code">  <span class="kw">if</span> (imminent.length > <span class="num">0</span>) {</span></div>
+      <div class="line add"><span class="ln">19</span><span class="gutter">+</span><span class="code">    <span class="kw">await</span> <span class="fn">patchNotify</span>({</span></div>
+      <div class="line add"><span class="ln">20</span><span class="gutter">+</span><span class="code">      channel: <span class="str">'push'</span>,</span></div>
+      <div class="line add"><span class="ln">21</span><span class="gutter">+</span><span class="code">      priority: <span class="str">'urgent'</span>,</span></div>
+      <div class="line add"><span class="ln">22</span><span class="gutter">+</span><span class="code">      message: <span class="str">`${imminent[0].lineName} in ${Math.<span class="fn">round</span>(imminent[0].timeToStation/60)}m`</span>,</span></div>
+      <div class="line add"><span class="ln">23</span><span class="gutter">+</span><span class="code">    });</span></div>
+      <div class="line add"><span class="ln">24</span><span class="gutter">+</span><span class="code">  }</span></div>
+      <div class="line add"><span class="ln">25</span><span class="gutter">+</span><span class="code">  <span class="kw">return</span> arrivals;</span></div>
+      <div class="line"><span class="ln">26</span><span class="gutter"> </span><span class="code">};</span></div>
+      <div class="line"><span class="ln">27</span><span class="gutter"> </span><span class="code"></span></div>
+      <div class="line"><span class="ln">28</span><span class="gutter"> </span><span class="code"><span class="com">// runs every 30s for 60min via CronCreate</span></span></div>
+      <div class="line"><span class="ln">29</span><span class="gutter"> </span><span class="code"><span class="kw">export</span> { poll };</span></div>
+    </div>
+  </aside>
+</div>
+</body>
+</html>

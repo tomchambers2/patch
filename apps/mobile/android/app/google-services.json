@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "236103167818",
+    "project_id": "patch-tc-dev",
+    "storage_bucket": "patch-tc-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:236103167818:android:730ced8ac07e07f2285bb3",
+        "android_client_info": {
+          "package_name": "io.github.tomchambers2.patch"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCoF_eeuwpdRGrGU-NTwWU_mWyfAy9eyN0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

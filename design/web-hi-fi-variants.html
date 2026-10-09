@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · variants (hi-fi v01)</title>
+<link rel="stylesheet" href="hi-fi-tokens.css">
+<style>
+  body { padding: 28px 0; }
+  .stage-label {
+    width: 1280px; margin: 0 auto 8px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-3);
+  }
+  .stage-label .num { background: var(--ink); color: var(--bg-app); padding: 2px 8px; margin-right: 8px; }
+  .stage-label .desc { text-transform: none; letter-spacing: 0; font-family: 'Inter', sans-serif; color: var(--ink-2); font-size: 13px; }
+
+  .stage {
+    width: 1280px; height: 700px;
+    margin: 0 auto 32px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .offline-banner {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: var(--waiting);
+    color: var(--bg-elevated);
+    padding: 8px 18px;
+    font-size: 12.5px;
+    text-align: center;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    z-index: 5;
+  }
+
+  .sidebar { background: var(--bg-panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+  .brandbar { padding: 18px 22px 16px; display: flex; align-items: center; gap: 6px; }
+  .brand { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 500; font-style: italic; font-size: 26px; letter-spacing: -0.02em; line-height: 1; }
+  .brandbar .conn-dot { margin-left: auto; }
+  .sb-list { flex: 1; overflow: hidden; }
+  .sb-section { padding: 4px 0; }
+  .sb-row { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; padding: 8px 14px; align-items: baseline; margin: 0 8px; border-radius: var(--radius); }
+  .sb-row.special .name { font-weight: 600; }
+  .sb-row.active { background: var(--accent-tint); }
+  .sb-row.read .name, .sb-row.read .preview { color: var(--ink-3); }
+  .sb-row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; color: var(--ink-3); }
+  .sb-row .status.running { color: var(--running); }
+  .sb-row .status.waiting { color: var(--waiting); }
+  .sb-row .status.special { color: var(--accent); }
+  .sb-row .status.read { color: var(--ink-faint); }
+  .sb-row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-row .name { font-size: 13.5px; font-weight: 500; }
+  .sb-row .preview { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+  .sb-row .when { font-size: 11px; color: var(--ink-3); }
+  .sb-row.in-folder { padding-left: 28px; }
+  .folder-head { padding: 14px 22px 4px; color: var(--ink-3); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  .divider { height: 1px; background: var(--line-soft); margin: 10px 16px; }
+  .arch-search {
+    margin: 4px 16px 8px;
+    border: 1px solid var(--line);
+    background: var(--bg-elevated);
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--ink-3);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    border-radius: var(--radius-sm);
+  }
+
+  .sb-bottom { padding: 12px 16px 18px; border-top: 1px solid var(--line-soft); }
+  .sb-link { display: flex; align-items: center; padding: 8px 12px; border-radius: var(--radius); color: var(--ink-2); font-size: 13px; }
+  .sb-link .icon { color: var(--ink-3); margin-right: 10px; font-size: 14px; }
+  .new-chat-btn { margin-top: 10px; width: 100%; padding: 12px 16px; border: none; border-radius: var(--radius); background: var(--ink); color: var(--bg-panel); font-family: inherit; font-size: 13.5px; font-weight: 500; }
+  .new-chat-btn.disabled { background: var(--ink-faint); }
+
+  .main { display: flex; flex-direction: column; overflow: hidden; background: var(--bg-elevated); }
+  .main-head { padding: 20px 28px 16px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: baseline; gap: 12px; }
+  .main-head .folder { color: var(--ink-3); font-size: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .main-head .title { font-family: 'Fraunces', Georgia, serif; font-size: 19px; }
+  .main-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .pill-badge { font-size: 11.5px; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--accent-tint); color: var(--accent-strong); font-weight: 500; border: 1px solid var(--accent-soft); }
+  .pill-badge.offline { background: #f3e3cf; color: var(--waiting); border-color: #ebd1ad; }
+  .ctrl { font-size: 12.5px; border: 1px solid var(--line); padding: 5px 12px; background: var(--bg-elevated); color: var(--ink-2); border-radius: var(--radius); font-weight: 500; }
+
+  .chat-banner {
+    background: #f9efd8;
+    border-bottom: 1px solid #ebd1ad;
+    padding: 8px 28px;
+    font-size: 12.5px;
+    color: var(--waiting);
+    font-weight: 500;
+  }
+
+  .stream { flex: 1; padding: 22px 28px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; }
+  .msg-user { align-self: flex-end; max-width: 75%; background: var(--accent-tint); color: var(--ink); padding: 11px 16px; border-radius: 16px 16px 4px 16px; font-size: 14.5px; border: 1px solid var(--accent-soft); }
+  .msg-assistant { color: var(--ink); padding: 4px 0; font-size: 14.5px; max-width: 92%; }
+
+  .perm-card {
+    background: var(--bg-panel);
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .perm-card .head { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--ink-3); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .perm-card .body-block {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .perm-card .question { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 36, "SOFT" 60, "wght" 500; font-size: 19px; margin: 4px 0 14px; color: var(--ink); letter-spacing: -0.01em; }
+  .perm-card .opts { display: flex; flex-direction: column; gap: 6px; }
+  .perm-card .opt { background: var(--bg-elevated); border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 14px; font-size: 13.5px; display: flex; gap: 12px; align-items: baseline; font-weight: 500; }
+  .perm-card .opt .num { color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 400; min-width: 16px; }
+  .perm-card .opt.yes { border-color: var(--accent); background: var(--accent); color: var(--bg-elevated); }
+  .perm-card .opt.yes .num { color: var(--bg-elevated); opacity: 0.65; }
+  .perm-card .opt.no { color: var(--ink-3); font-weight: 400; }
+  .perm-card .opt .esc-hint { margin-left: auto; color: var(--ink-faint); font-size: 11px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .perm-card .opt code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; color: inherit; }
+  .perm-card .opt.yes code { background: rgba(255,255,255,0.18); }
+
+  .composer { border-top: 1px solid var(--line-soft); padding: 16px 28px 20px; background: var(--bg-elevated); display: flex; gap: 10px; align-items: flex-end; }
+  .composer .input { flex: 1; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; min-height: 48px; color: var(--ink-3); font-family: inherit; font-size: 14.5px; background: var(--bg-panel); }
+  .composer.disabled .input { background: var(--bg-soft); color: var(--ink-faint); }
+  .composer .icon-btn { width: 48px; height: 48px; border: 1px solid var(--line); background: var(--bg-elevated); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--ink-2); }
+  .composer .send { background: var(--accent); color: var(--bg-elevated); border-color: var(--accent); }
+  .composer.disabled .send { background: var(--ink-faint); border-color: var(--ink-faint); }
+
+  /* empty hero */
+  .empty-hero {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 40px;
+  }
+  .empty-hero .card { max-width: 520px; text-align: center; }
+  .empty-hero h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: "opsz" 144, "SOFT" 50, "wght" 500;
+    font-size: 28px;
+    margin: 0 0 6px;
+    letter-spacing: -0.012em;
+  }
+  .empty-hero p { color: var(--ink-3); font-size: 14px; margin: 6px 0 0; line-height: 1.55; }
+  .empty-hero .actions { display: flex; gap: 10px; justify-content: center; margin-top: 24px; }
+  .empty-hero .btn-primary { background: var(--accent); color: var(--bg-elevated); padding: 10px 20px; border: none; border-radius: var(--radius); font-family: inherit; font-size: 13.5px; font-weight: 600; }
+  .empty-hero .btn-ghost { background: var(--bg-elevated); color: var(--ink); padding: 10px 20px; border: 1px solid var(--line); border-radius: var(--radius); font-family: inherit; font-size: 13.5px; font-weight: 500; }
+  .empty-hero .checklist {
+    text-align: left; margin-top: 28px;
+    padding: 18px 22px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+  }
+  .empty-hero .checklist h3 {
+    margin: 0 0 10px; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-3); font-weight: 600;
+  }
+  .empty-hero .checklist .item { display: flex; gap: 10px; font-size: 13.5px; padding: 5px 0; }
+  .empty-hero .checklist .check { font-family: 'JetBrains Mono', ui-monospace, monospace; width: 14px; color: var(--accent); }
+  .empty-hero .checklist .check.todo { color: var(--ink-3); }
+  .empty-hero .checklist .item.todo { color: var(--ink-3); }
+  .empty-hero .checklist .item a { color: var(--accent-strong); }
+
+  /* archived rows */
+  .archived-section .meta { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+</style>
+</head>
+<body>
+
+
+<!-- ── V1 EMPTY ── -->
+<div class="stage-label"><span class="num">V1</span><span class="desc">Empty / first launch</span></div>
+<div class="stage">
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span><span class="conn-dot"></span></div>
+    <div class="sb-list">
+
+      <div class="sb-section">
+        <div class="sb-row special"><div class="body"><div class="name">Manager</div></div><span class="row-tools"><span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-row pinned">
+          <span class="status"><span class="badge read">✓</span></span>
+          <div class="body"><div class="name">Home Assistant</div><div class="preview">porch lights off · 14:08</div></div>
+          <span class="row-tools">
+            <span class="pin-marker"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+          </span>
+        </div>
+      </div>
+      <div class="divider pinned-div"></div>
+
+      <div style="padding: 22px 18px; color: var(--ink-3); font-size: 12.5px; font-style: italic;">No chats yet. Hit <b>+ New chat</b> below.</div>
+
+      <div class="channels">
+        <div class="ch-toggle">
+          <svg class="ch-chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          Channels
+        </div>
+      </div>
+
+      <div class="arch-toggle">
+        <svg class="arch-icon" viewBox="0 0 24 24"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+        Archived
+      </div>
+
+    </div>
+    <div class="sb-bottom">
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>Schedules</div>
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+      <button class="new-chat-btn">+ New chat</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="empty-hero">
+      <div class="card">
+        <h2>Welcome to patch</h2>
+        <p>A thin layer over Claude Code that runs on your Hetzner box.<br>Reach your chats from web, mobile, or a voice device.</p>
+        <div class="actions">
+          <button class="btn-primary">+ New chat</button>
+          <button class="btn-ghost">Open Manager</button>
+        </div>
+        <div class="checklist">
+          <h3>setup</h3>
+          <div class="item"><span class="check">✓</span><span>Daemon connected</span></div>
+          <div class="item"><span class="check">✓</span><span>Claude subscription connected</span></div>
+          <div class="item todo"><span class="check todo">○</span><span>Connect Telegram bot · <a href="">Settings → Integration keys</a></span></div>
+          <div class="item todo"><span class="check todo">○</span><span>Pair a voice device · <a href="">Settings → Surfaces</a></span></div>
+          <div class="item todo"><span class="check todo">○</span><span>Set up your first schedule · <a href="">Schedules</a></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── V2 OFFLINE ── -->
+<div class="stage-label"><span class="num">V2</span><span class="desc">Daemon offline — banner, queued composer</span></div>
+<div class="stage">
+  <div class="offline-banner">⚠ Daemon offline — reconnecting… (last seen 18s ago)</div>
+  <div class="sidebar" style="margin-top: 36px;">
+    <div class="brandbar"><span class="brand">patch</span><span class="conn-dot offline"></span></div>
+    <div class="sb-list">
+
+      <div class="sb-section">
+        <div class="sb-row special"><div class="body"><div class="name">Manager</div></div><span class="row-tools"><span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-row pinned">
+          <span class="status"><span class="badge read">✓</span></span>
+          <div class="body"><div class="name">Home Assistant</div><div class="preview">porch lights off · 14:08</div></div>
+          <span class="row-tools">
+            <span class="pin-marker"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+          </span>
+        </div>
+      </div>
+      <div class="divider pinned-div"></div>
+
+      <div class="folder-head">bed-planner</div>
+      <div class="sb-section">
+        <div class="sb-row in-folder"><span class="status">·</span><div class="body"><div class="name">fix layout bug</div></div><span class="when">2m</span></div>
+      </div>
+
+      <div class="channels open">
+        <div class="ch-toggle">
+          <svg class="ch-chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          Channels
+        </div>
+        <div class="ch-list">
+          <div class="ch-row"><span class="ch-name">Telegram</span></div>
+          <div class="ch-row">
+            <span class="ch-name">Speakers</span>
+            <span class="ch-meta"><svg viewBox="0 0 24 24" width="11" height="11"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>kitchen</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-toggle">
+        <svg class="arch-icon" viewBox="0 0 24 24"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+        Archived
+      </div>
+
+    </div>
+    <div class="sb-bottom">
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>Schedules</div>
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+      <button class="new-chat-btn disabled">+ New chat</button>
+    </div>
+  </div>
+  <div class="main" style="margin-top: 36px;">
+    <div class="main-head">
+      <span class="folder">~/projects/bed-planner</span>
+      <span class="title">fix layout bug</span>
+      <span class="right">
+        <span class="pill-badge offline">○ disconnected</span>
+        <span class="ctrl">files</span>
+      </span>
+    </div>
+    <div class="chat-banner">Daemon offline — your messages are queued and will send on reconnect.</div>
+    <div class="stream">
+      <div class="msg-user">fix the layout bug — the right column overlaps the editor on narrow screens.</div>
+      <div class="msg-assistant">I'll start by reading the layout file.</div>
+    </div>
+    <div class="composer disabled">
+      <div class="input">queued until reconnect…</div>
+      <span class="icon-btn">🎙</span>
+      <span class="icon-btn send">↑</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── V3 BASH PERMISSION ── -->
+<div class="stage-label"><span class="num">V3</span><span class="desc">Bash permission — same 1/2/3 pattern, command instead of diff</span></div>
+<div class="stage">
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span><span class="conn-dot"></span></div>
+    <div class="sb-list">
+
+      <div class="sb-section">
+        <div class="sb-row special"><div class="body"><div class="name">Manager</div></div><span class="row-tools"><span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-row pinned">
+          <span class="status"><span class="badge read">✓</span></span>
+          <div class="body"><div class="name">Home Assistant</div><div class="preview">porch lights off · 14:08</div></div>
+          <span class="row-tools">
+            <span class="pin-marker"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+          </span>
+        </div>
+      </div>
+      <div class="divider pinned-div"></div>
+
+      <div class="folder-head">portfolio</div>
+      <div class="sb-section">
+        <div class="sb-row in-folder active">
+          <span class="status"><span class="badge permission"></span></span>
+          <div class="body"><div class="name">deploy to vercel</div></div>
+          <span class="when">just now</span>
+        </div>
+      </div>
+
+      <div class="channels open">
+        <div class="ch-toggle">
+          <svg class="ch-chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          Channels
+        </div>
+        <div class="ch-list">
+          <div class="ch-row"><span class="ch-name">Telegram</span></div>
+          <div class="ch-row">
+            <span class="ch-name">Speakers</span>
+            <span class="ch-meta"><svg viewBox="0 0 24 24" width="11" height="11"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>kitchen</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-toggle">
+        <svg class="arch-icon" viewBox="0 0 24 24"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+        Archived
+      </div>
+
+    </div>
+    <div class="sb-bottom">
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>Schedules</div>
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+      <button class="new-chat-btn">+ New chat</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="main-head">
+      <span class="folder">~/projects/portfolio</span>
+      <span class="title">deploy to vercel</span>
+      <span class="right">
+        <span class="pill-badge" style="background: #f5e7d0; color: var(--waiting); border-color: #ead4a8;">! waiting</span>
+        <span class="ctrl">files</span>
+      </span>
+    </div>
+    <div class="stream">
+      <div class="msg-user">deploy the latest portfolio build to vercel.</div>
+      <div class="msg-assistant">I'll run the vercel deploy command — this triggers a production deploy.</div>
+
+      <div class="perm-card">
+        <div class="head">Bash command</div>
+        <div class="body-block">vercel deploy --prod --token=$VERCEL_TOKEN</div>
+        <div class="question">Do you want to proceed?</div>
+        <div class="opts">
+          <div class="opt yes"><span class="num">1</span><span>Yes</span></div>
+          <div class="opt"><span class="num">2</span><span>Yes, allow all <code>vercel</code> commands during this session</span></div>
+          <div class="opt no"><span class="num">3</span><span>No, and tell Claude what to do differently</span><span class="esc-hint">esc</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="input">Type a message…</div>
+      <span class="icon-btn">🎙</span>
+      <span class="icon-btn send">↑</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── V4 ARCHIVED EXPANDED ── -->
+<div class="stage-label"><span class="num">V4</span><span class="desc">Archived — expanded with AI search at the top</span></div>
+<div class="stage">
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span><span class="conn-dot"></span></div>
+    <div class="sb-list">
+
+      <div class="sb-section">
+        <div class="sb-row special"><div class="body"><div class="name">Manager</div></div><span class="row-tools"><span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-row pinned">
+          <span class="status"><span class="badge read">✓</span></span>
+          <div class="body"><div class="name">Home Assistant</div><div class="preview">porch lights off · 14:08</div></div>
+          <span class="row-tools">
+            <span class="pin-marker"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+          </span>
+        </div>
+      </div>
+      <div class="divider pinned-div"></div>
+
+      <div class="folder-head">bed-planner</div>
+      <div class="sb-section">
+        <div class="sb-row in-folder"><span class="status"><span class="badge working"></span></span><div class="body"><div class="name">fix layout bug</div></div><span class="when">2m</span></div>
+      </div>
+
+      <div class="channels">
+        <div class="ch-toggle">
+          <svg class="ch-chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          Channels
+        </div>
+      </div>
+
+      <div class="arch-toggle" style="background: var(--accent-tint); color: var(--accent-strong);">
+        <svg class="arch-icon" viewBox="0 0 24 24" style="stroke: var(--accent-strong);"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+        Archived
+      </div>
+
+      <div class="archived-section" style="margin-top: 4px;">
+        <div class="arch-search">🔍 the chat where I talked about pancakes…</div>
+        <div class="sb-row in-folder"><span class="status"><span class="badge read">✓</span></span><div class="body"><div class="name">monthly close</div><div class="meta">freeagent · today</div></div></div>
+        <div class="sb-row in-folder"><span class="status"><span class="badge read">⏰</span></span><div class="body"><div class="name">bus-watch</div><div class="meta">spawned · today 08:57</div></div></div>
+        <div class="sb-row in-folder"><span class="status"><span class="badge read">✓</span></span><div class="body"><div class="name">refactor api route</div><div class="meta">bed-planner · yesterday</div></div></div>
+        <div class="sb-row in-folder"><span class="status"><span class="badge read">⏰</span></span><div class="body"><div class="name">weekly newsletter</div><div class="meta">spawned · Sun 09:00</div></div></div>
+        <div class="sb-row in-folder"><span class="status"><span class="badge read">✓</span></span><div class="body"><div class="name">devon spots</div><div class="meta">wild-swim · 2d ago</div></div></div>
+      </div>
+
+    </div>
+    <div class="sb-bottom">
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>Schedules</div>
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+      <button class="new-chat-btn">+ New chat</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="main-head"><span class="folder" style="font-style: italic; color: var(--ink-faint);">— select a chat to view —</span></div>
+  </div>
+</div>
+
+
+</body>
+</html>

@@ -1,0 +1,18 @@
+[project]
+name = "mock-voice-device"
+version = "0.1.0"
+description = "Mock WSS harness that pretends to be a patch voice device (HA Voice PE)."
+requires-python = ">=3.11"
+dependencies = [
+    "websockets>=12.0",
+]
+
+[project.scripts]
+mock-voice-device = "mock_voice_device.main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mock_voice_device"]

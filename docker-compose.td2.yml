@@ -1,0 +1,6 @@
+services:
+  daemon:
+    environment:
+      PATCH_HOME: /daemon-home
+    volumes:
+      - /tmp/patch-data/daemon-home:/daemon-home

@@ -1,0 +1,70 @@
+{
+  "name": "patch",
+  "// version": "Headline <major>.<minor> only — the effective build version is major.minor.<commit count>, computed by scripts/version.mjs. Bump this by hand for a new headline number.",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Patch — thin coordination layer over Claude Code (monorepo root)",
+  "packageManager": "pnpm@10.29.3",
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test --concurrency=1 --env-mode=loose",
+    "test:e2e": "pnpm --filter @patch/server exec vitest run test/e2e",
+    "test:integration": "pnpm --filter @patch/web test:integration",
+    "mock-check": "node scripts/mock-check.mjs",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "// smoke:android": "The SURFACE layer (spec/19-testing.md). Drives the shipped APK on a headless emulator through every tab and the whole new-chat flow, asserting each destination painted and that logcat reports no render loop, crash or ANR. Needs a paired surface JWT: PATCH_SMOKE_CREDENTIAL=$(cat ~/.patch/credential.jwt) pnpm smoke:android --apk <path> --sha <gitSha> --avd Pixel_7",
+    "smoke:android": "node scripts/mobile-surface-smoke.mjs",
+    "// verify": "THE gate (spec/19-testing.md § Verification) — every test layer that runs unattended, in one command. `pnpm test` stays the fast inner loop; this is what has to be green to deploy, and `pnpm run deploy` runs it first.",
+    "verify": "node scripts/verify.mjs",
+    "dev:server": "pnpm --filter @patch/server dev",
+    "dev:daemon": "pnpm --filter @patch/daemon dev",
+    "dev:web": "pnpm --filter @patch/web dev",
+    "// deploy": "THE deploy command — every surface at once (web, server, daemon, mobile OTA, mobile APK, desktop). Run from /srv/patch on the box. It detaches itself, because the daemon restart it ends with kills the chat that started it. See deploy.md.",
+    "deploy": "node scripts/ship.mjs",
+    "version:show": "node scripts/version.mjs",
+    "// build:desktop": "Signing is left ENABLED (auto-discovery). It used to force CSC_IDENTITY_AUTO_DISCOVERY=false, which produced an adhoc-signed app — and Squirrel refuses to apply an update to one, so the shell could never self-update. With a code-signing identity in the keychain this signs; without one electron-builder logs a loud 'skipped code signing' warning and you get a build that cannot auto-update. PATCH_SKIP_NOTARIZE=1 because notarization needs a paid Apple account (see spec/11 § Desktop code signing).",
+    "build:desktop": "pnpm --filter @patch/desktop build && PATCH_SKIP_NOTARIZE=1 pnpm --filter @patch/desktop dist:dry",
+    "build:android": "cd apps/mobile/android && ./gradlew assembleRelease",
+    "// build:daemon": "The daemon's installable artifact per OS/arch (spec/11 § Daemon installation). Needs PATCH_BUILD_VENDOR (pinned Node runtimes + onnxruntime prebuilds + silero_vad.onnx) and PATCH_ARTIFACT_SIGNING_KEY; the darwin target also needs PATCH_CODESIGN_IDENTITY + PATCH_CODESIGN_ENTITLEMENTS. See packages/daemon/README.md.",
+    "build:daemon": "node scripts/build-daemon.mjs",
+    "// build:server": "The server + SPA as one installable release (spec/11 § Server installation): dist/server/patch-server-<release>/ and its tarball. Install it with <release>/install — the same path `pnpm run deploy` uses on the box.",
+    "build:server": "node scripts/build-server.mjs",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+    "prepare": "simple-git-hooks || true"
+  },
+  "devDependencies": {
+    "@noble/ed25519": "^2.3.0",
+    "@noble/hashes": "^1.8.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@types/node": "^22.9.0",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "@vitest/coverage-v8": "2.1.9",
+    "esbuild": "0.25.12",
+    "eslint": "^9.15.0",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.4.0",
+    "simple-git-hooks": "^2.11.1",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}

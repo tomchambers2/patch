@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — Quick chat widget</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .home-screen { align-items: center; justify-content: center; }
+  .stage { display: flex; flex-direction: column; align-items: center; }
+  .quick-chat {
+    width: 42vw;
+    max-width: 220px;
+    aspect-ratio: 1 / 1;
+    background: var(--accent-strong);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px;
+  }
+  .quick-chat .mic {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.14);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .quick-chat .label { font-size: 14px; font-weight: 600; color: var(--bg-elevated); text-align: center; line-height: 1.3; }
+</style>
+</head>
+<body>
+
+<div class="home-screen">
+  <div class="stage">
+    <div class="widget-card quick-chat">
+      <div class="mic">
+        <svg viewBox="0 0 24 24" width="26" height="26" stroke="#fdfaf2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </div>
+      <div class="label">Talk to<br>patch</div>
+    </div>
+    <div class="caption">Quick Chat · 2×2 · one tap straight into a new voice chat<br>with Manager — no app launch screen in between.</div>
+  </div>
+</div>
+
+</body>
+</html>

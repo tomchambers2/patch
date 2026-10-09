@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — Chats widget</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .home-screen { align-items: center; justify-content: center; }
+  .stage { display: flex; flex-direction: column; align-items: center; }
+  .chats-widget { width: 80vw; max-width: 380px; padding: 16px 18px 8px; }
+  .chats-widget .head { display: flex; align-items: center; margin-bottom: 12px; }
+  .chats-widget .head .meta { margin-left: auto; font-size: 12.5px; color: var(--accent-strong); font-weight: 600; }
+  .chat-row { display: grid; grid-template-columns: 16px 1fr auto; gap: 12px; align-items: baseline; padding: 9px 0; }
+  .chat-row + .chat-row { border-top: 1px solid var(--line-soft); }
+  .chat-row .status { text-align: center; }
+  .chat-row .name { font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-row .preview { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .chat-row .when { font-size: 11px; color: var(--ink-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div class="home-screen">
+  <div class="stage">
+    <div class="widget-card chats-widget">
+      <div class="widget-brand head"><span class="name">patch</span><span class="dot"></span><span class="meta">3 active</span></div>
+      <div class="chat-row">
+        <span class="status"><span class="badge permission"></span></span>
+        <div>
+          <div class="name">fix layout bug</div>
+          <div class="preview">edit src/layout.ts — needs your OK</div>
+        </div>
+        <span class="when">2m</span>
+      </div>
+      <div class="chat-row">
+        <span class="status"><span class="badge working"></span></span>
+        <div>
+          <div class="name">deploy to vercel</div>
+          <div class="preview">running build…</div>
+        </div>
+        <span class="when">just now</span>
+      </div>
+      <div class="chat-row">
+        <span class="status"><span class="badge read">✓</span></span>
+        <div>
+          <div class="name">Home Assistant</div>
+          <div class="preview">porch lights off · 14:08</div>
+        </div>
+        <span class="when">14:08</span>
+      </div>
+    </div>
+    <div class="caption">Chats · 4×2 · same badges as the app (permission / running / read).<br>Tap a row to open that chat, tap the header to open the list.</div>
+  </div>
+</div>
+
+</body>
+</html>

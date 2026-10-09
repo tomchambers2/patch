@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — mobile (hi-fi v04)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..700,30..100&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-app:        #ebe7dc;
+    --bg-panel:      #f4f0e4;
+    --bg-elevated:   #fdfaf2;
+    --bg-soft:       #efebde;
+
+    --ink:           #1c1814;
+    --ink-2:         #4a4239;
+    --ink-3:         #857d72;
+    --ink-faint:     #b3aca0;
+
+    --line:          #d6cfba;
+    --line-soft:     #e3ddc8;
+
+    --accent:        #4f7a3e;
+    --accent-soft:   #cad9be;
+    --accent-strong: #3a5e2c;
+    --accent-tint:   #e3ecdb;
+
+    --running:       #4f7a3e;
+    --waiting:       #b67a1a;
+    --read:          #857d72;
+
+    --radius:        12px;
+    --radius-sm:     8px;
+    --radius-lg:     20px;
+
+    --shadow-sm:     0 1px 2px rgba(40,30,15,0.06);
+    --shadow:        0 8px 24px rgba(40,30,15,0.10), 0 2px 6px rgba(40,30,15,0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-app);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 32px 0;
+  }
+
+  .phone {
+    width: 412px;
+    height: 1080px;
+    background: var(--bg-panel);
+    border: 1px solid var(--ink);
+    border-radius: 36px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+
+  .status-bar {
+    height: 36px;
+    padding: 0 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  .screen-head {
+    padding: 6px 22px 18px;
+    display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0;
+  }
+  .screen-head .title {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: "opsz" 144, "SOFT" 50, "wght" 500;
+    font-style: italic;
+    font-size: 30px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .brand-mark {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: inline-block;
+    margin-left: 2px;
+    align-self: flex-end;
+    margin-bottom: 4px;
+  }
+  .screen-head .conn-dot {
+    margin-left: auto;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-tint);
+  }
+  .live-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-tint);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+
+  .list { flex: 1; overflow: hidden; padding: 4px 14px 0; }
+
+  /* special threads section — single grouped card */
+  .special-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 4px 0;
+    margin-bottom: 16px;
+  }
+  .row {
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .row.special { padding: 14px 14px; grid-template-columns: 1fr auto; }
+  .row.special + .row.special { border-top: 1px solid var(--line-soft); }
+  .row.special .name { font-weight: 600; font-size: 16px; }
+  .row.special.m-special .name { font-size: 17px; }
+  .row .status { font-size: 14px; line-height: 1; text-align: center; }
+  .row .status .badge {
+    /* done / check-me = green target ring */
+    display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 5px var(--accent);
+    vertical-align: middle; margin-bottom: 1px;
+  }
+  .row .status .badge.working {
+    box-shadow: none;
+    width: 10px; height: 10px;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  .row .status .badge.permission {
+    /* permission = orange target ring, same size as done */
+    background: var(--waiting);
+    box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 5px var(--waiting);
+  }
+  .chat-card.active .row .status .badge { box-shadow: 0 0 0 2px var(--accent-tint), 0 0 0 5px var(--accent); }
+  .chat-card.active .row .status .badge.permission { box-shadow: 0 0 0 2px var(--accent-tint), 0 0 0 5px var(--waiting); }
+  .row .status .badge.read {
+    /* read = small grey tick */
+    background: none; box-shadow: none;
+    width: auto; height: auto;
+    color: var(--ink-faint);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 13px;
+  }
+  .row .status.special { color: var(--accent); font-family: ui-monospace, monospace; font-size: 14px; }
+  .row .body { min-width: 0; overflow: hidden; }
+  .row .name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.005em; }
+  .row .preview { font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+  .row .when { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .row.read .name { color: var(--read); font-weight: 500; }
+  .row.read .preview { color: var(--ink-faint); }
+
+  /* chat card — individual chat row as its own elevated card */
+  .chat-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 8px;
+    transition: box-shadow 0.15s ease;
+  }
+  .chat-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-tint), var(--shadow-sm);
+  }
+  .chat-card.read { opacity: 0.65; }
+
+  /* folder header — slimmer, with a subtle line under */
+  .folder-head {
+    padding: 14px 8px 8px;
+    color: var(--ink-3);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .folder-head::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line-soft);
+  }
+
+  .m-special .m-mic {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink-3);
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    margin-left: auto;
+  }
+  .m-pin {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--accent-strong);
+    margin-left: 6px;
+  }
+
+  /* mobile channels */
+  .m-channels {
+    margin: 16px 22px 6px;
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .m-ch-toggle {
+    padding: 12px 14px;
+    color: var(--ink-2);
+    font-size: 14px;
+    font-weight: 500;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .m-ch-chev { stroke: var(--ink-3); transition: transform 0.15s ease; flex-shrink: 0; }
+  .m-channels.open .m-ch-chev { transform: rotate(90deg); }
+  .m-channels.open .m-ch-list { display: block; }
+  .m-ch-list { display: none; padding: 0 0 8px; }
+  .m-ch-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px;
+    margin: 0 6px;
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .m-ch-row .m-ch-name { flex: 1; }
+  .m-ch-row .m-ch-meta {
+    color: var(--accent-strong);
+    font-size: 11px;
+    background: var(--accent-tint);
+    padding: 2px 8px;
+    border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  /* mobile archived row */
+  .m-archived {
+    margin: 16px 22px 4px;
+    padding: 12px 14px;
+    color: var(--ink-2);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 10px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .m-arch-icon { stroke: var(--ink-3); flex-shrink: 0; }
+
+  .fab {
+    position: absolute;
+    right: 22px; bottom: 96px;
+    width: 60px; height: 60px;
+    background: var(--accent);
+    color: var(--bg-elevated);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    font-weight: 300;
+    box-shadow: var(--shadow);
+    border: none;
+  }
+
+  .tab-bar {
+    height: 80px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-panel);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    flex-shrink: 0;
+    padding: 8px 14px 16px;
+  }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px;
+    color: var(--ink-3);
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--radius);
+  }
+  .tab .icon { font-size: 21px; line-height: 1; }
+  .tab.active { color: var(--accent); }
+  .tab-voice .voice-bubble {
+    width: 44px; height: 44px;
+    background: var(--accent);
+    color: var(--bg-elevated);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: -8px;
+    margin-top: -10px;
+  }
+  .tab-voice { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>5G · ▮▮▮▮</span>
+  </div>
+
+  <div class="screen-head">
+    <div class="title">patch</div>
+    <span class="conn-dot" title="daemon connected"></span>
+  </div>
+
+  <div class="list">
+
+    <div class="special-card">
+      <div class="row special m-special">
+        <div class="body"><div class="name">Manager</div></div>
+        <span class="m-mic"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+      </div>
+    </div>
+
+    <div class="chat-card pinned">
+      <div class="row">
+        <span class="status"><span class="badge read">✓</span></span>
+        <div class="body">
+          <div class="name">Home Assistant</div>
+          <div class="preview">porch lights off · 14:08</div>
+        </div>
+        <span class="m-pin"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+      </div>
+    </div>
+
+    <div class="folder-head">bed-planner</div>
+    <div class="chat-card active">
+      <div class="row">
+        <span class="status"><span class="badge permission"></span></span>
+        <div class="body">
+          <div class="name">fix layout bug</div>
+          <div class="preview">edit src/layout.ts — needs your OK</div>
+        </div>
+        <span class="when">2m</span>
+      </div>
+    </div>
+    <div class="chat-card">
+      <div class="row">
+        <span class="status"><span class="badge"></span></span>
+        <div class="body">
+          <div class="name">refactor api route</div>
+          <div class="preview">draft proposed; awaiting your call</div>
+        </div>
+        <span class="when">12m</span>
+      </div>
+    </div>
+
+    <div class="folder-head">portfolio</div>
+    <div class="chat-card">
+      <div class="row">
+        <span class="status"><span class="badge working"></span></span>
+        <div class="body">
+          <div class="name">deploy to vercel</div>
+          <div class="preview">running build…</div>
+        </div>
+        <span class="when">just now</span>
+      </div>
+    </div>
+
+    <div class="folder-head">freeagent</div>
+    <div class="chat-card read">
+      <div class="row">
+        <span class="status"><span class="badge read">✓</span></span>
+        <div class="body">
+          <div class="name">monthly close</div>
+          <div class="preview">draft invoices ready for review</div>
+        </div>
+        <span class="when">1h</span>
+      </div>
+    </div>
+
+    <div class="m-channels open">
+      <div class="m-ch-toggle">
+        <svg class="m-ch-chev" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        Channels
+      </div>
+      <div class="m-ch-list">
+        <div class="m-ch-row">
+          <span class="m-ch-name">Telegram</span>
+        </div>
+        <div class="m-ch-row">
+          <span class="m-ch-name">Speakers</span>
+          <span class="m-ch-meta"><svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>kitchen</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-archived">
+      <svg class="m-arch-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+      Archived
+    </div>
+
+  </div>
+
+  <button class="fab">+</button>
+
+  <div class="tab-bar">
+    <div class="tab active">
+      <span class="icon">💬</span>
+      <span>Chats</span>
+    </div>
+    <div class="tab tab-voice">
+      <span class="voice-bubble">🎙</span>
+      <span>Voice</span>
+    </div>
+    <div class="tab">
+      <span class="icon">⚙</span>
+      <span>Settings</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

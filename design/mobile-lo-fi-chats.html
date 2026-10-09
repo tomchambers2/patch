@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — mobile · chats (low-fi v01)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --voice: #b73a3a;
+    --tab-bar: #f4f4f4;
+    --tab-active: #222;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 24px 0;
+    background: #ddd;
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  .phone-frame {
+    width: 412px;
+    height: 915px;
+    margin: 0 auto;
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    border-radius: 32px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* notch / status bar */
+  .status-bar {
+    height: 36px;
+    padding: 0 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+  .status-bar .right { display: flex; gap: 6px; }
+
+  /* screen header */
+  .screen-head {
+    padding: 4px 18px 12px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .screen-head .title { font-size: 22px; font-weight: 600; }
+  .screen-head .right { margin-left: auto; }
+  .screen-head .icon-btn {
+    width: 28px; height: 28px;
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    background: var(--bg);
+  }
+
+  /* search */
+  .search {
+    margin: 12px 18px 0;
+    border: 1px solid var(--line);
+    background: var(--fill);
+    padding: 8px 12px;
+    font-size: 14px;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* list area */
+  .list { flex: 1; overflow: hidden; padding: 12px 0 0; }
+
+  .row {
+    padding: 10px 18px;
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+    border-bottom: 1px solid var(--fill);
+  }
+  .row.special { padding: 12px 18px; }
+  .row.special .name { font-weight: 600; }
+  .row.in-folder { padding-left: 38px; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 14px; line-height: 1; text-align: center; }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.idle { color: var(--muted); }
+  .row .status.read { color: var(--faded); }
+  .row .status.special { color: var(--muted); }
+  .row .body { min-width: 0; overflow: hidden; }
+  .row .name { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .preview { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .row .when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .row.read .name { color: var(--muted); }
+
+  .folder-head {
+    padding: 14px 18px 4px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-family: ui-monospace, monospace;
+  }
+
+  .divider {
+    border-top: 1px solid var(--line);
+    margin: 10px 0 4px;
+  }
+
+  .arch-toggle {
+    padding: 12px 18px;
+    color: var(--muted);
+    font-size: 13px;
+    border-top: 1px dashed var(--line);
+  }
+
+  /* FAB */
+  .fab {
+    position: absolute;
+    right: 18px;
+    bottom: 84px;
+    width: 56px; height: 56px;
+    border: 2px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    font-weight: 300;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  }
+
+  /* tab bar */
+  .tab-bar {
+    height: 68px;
+    border-top: 1px solid var(--line);
+    background: var(--tab-bar);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    flex-shrink: 0;
+    padding-bottom: 6px;
+  }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .tab .icon { font-size: 22px; line-height: 1; }
+  .tab.active { color: var(--tab-active); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="phone-frame">
+
+  <!-- status bar -->
+  <div class="status-bar">
+    <span>9:41</span>
+    <span class="right">5G · ▮▮▮▮</span>
+  </div>
+
+  <!-- screen header -->
+  <div class="screen-head">
+    <span class="title">Chats</span>
+    <span class="right">
+      <span class="icon-btn">⚙</span>
+    </span>
+  </div>
+
+  <!-- list -->
+  <div class="list">
+
+    <!-- special threads (Manager has its own tab, so just Telegram + Voice here) -->
+    <div class="row special">
+      <span class="status special">★</span>
+      <div class="body">
+        <div class="name">Telegram</div>
+      </div>
+      <span class="when"></span>
+    </div>
+    <div class="row special">
+      <span class="status running">★</span>
+      <div class="body">
+        <div class="name">Voice</div>
+      </div>
+      <span class="when">live</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- bed-planner folder -->
+    <div class="folder-head">bed-planner</div>
+    <div class="row in-folder">
+      <span class="status running">●</span>
+      <div class="body">
+        <div class="name">fix layout bug</div>
+        <div class="preview">checking the grid in src/layout.ts…</div>
+      </div>
+      <span class="when">2m</span>
+    </div>
+    <div class="row in-folder">
+      <span class="status idle">·</span>
+      <div class="body">
+        <div class="name">refactor api route</div>
+        <div class="preview">draft proposed; awaiting your call</div>
+      </div>
+      <span class="when">12m</span>
+    </div>
+
+    <!-- portfolio -->
+    <div class="folder-head">portfolio</div>
+    <div class="row in-folder">
+      <span class="status waiting">!</span>
+      <div class="body">
+        <div class="name">approve manifest write</div>
+        <div class="preview">approve write to manifest.json?</div>
+      </div>
+      <span class="when">4m</span>
+    </div>
+
+    <!-- health-tracker -->
+    <div class="folder-head">health-tracker</div>
+    <div class="row in-folder">
+      <span class="status idle">·</span>
+      <div class="body">
+        <div class="name">weekly summary script</div>
+        <div class="preview">tests passing; ready for review</div>
+      </div>
+      <span class="when">38m</span>
+    </div>
+
+    <!-- freeagent (read) -->
+    <div class="folder-head">freeagent</div>
+    <div class="row in-folder read">
+      <span class="status read">✓</span>
+      <div class="body">
+        <div class="name">monthly close</div>
+        <div class="preview">draft invoices ready for review</div>
+      </div>
+      <span class="when">1h</span>
+    </div>
+
+    <!-- archived collapse -->
+    <div class="arch-toggle">▸ archived (12)</div>
+
+  </div>
+
+  <!-- FAB -->
+  <div class="fab">+</div>
+
+  <!-- tab bar -->
+  <div class="tab-bar">
+    <div class="tab active">
+      <span class="icon">💬</span>
+      <span>Chats</span>
+    </div>
+    <div class="tab">
+      <span class="icon">★</span>
+      <span>Manager</span>
+    </div>
+    <div class="tab">
+      <span class="icon">⏰</span>
+      <span>Schedules</span>
+    </div>
+    <div class="tab">
+      <span class="icon">⚙</span>
+      <span>Settings</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

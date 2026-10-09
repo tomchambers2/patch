@@ -1,0 +1,85 @@
+# Pinned sdkconfig defaults for patch-voice-device.
+# Fresh checkouts MUST produce a functional binary without menuconfig — per
+# spec/principles.md (no fallbacks, no silent IDF defaults).
+# Target: HA Voice Preview Edition (ESP32-S3-WROOM-1U, 16 MB flash, 8 MB octal PSRAM).
+
+# Target chip
+CONFIG_IDF_TARGET="esp32s3"
+
+# Patch server + daemon endpoint (F1 local-dev bring-up).
+# The boot-check fails loud on the placeholder "patch.example.com"
+# (spec/principles.md: no fallbacks), so a fresh checkout MUST build with a
+# real endpoint. These point at the F1 dev daemon on the LAN host the flashed
+# unit is paired to (see .tmp/f1-prov/launch-f1-daemon-real.sh — control + audio
+# WSS on :3023, ws:// no TLS). On subsequent boots the daemon host/port/tls are
+# read from NVS provisioning; PATCH_SERVER_URL is still used for the OTA
+# manifest fetch + (re)pairing. Override via `idf.py menuconfig` for prod.
+CONFIG_PATCH_SERVER_URL="http://192.168.68.79:3010"
+CONFIG_PATCH_DAEMON_HOST="192.168.68.79"
+CONFIG_PATCH_DAEMON_PORT=3023
+# CONFIG_PATCH_DAEMON_TLS is not set
+
+# PSRAM (HA Voice PE has octal PSRAM)
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# Octal PSRAM at 80 MHz. The audio path keeps its DMA / WSS buffers in PSRAM;
+# at the IDF default 40 MHz the bus can't keep up with the 20 ms mic-frame
+# cadence and the wakeword consumer queue saturates ("consumer 0 queue full;
+# dropping frame" flood). Octal PSRAM on the ESP32-S3 supports 80 MHz; pin it.
+CONFIG_SPIRAM_SPEED_80M=y
+
+# CPU at the full 240 MHz. microWakeWord TFLite-Micro inference runs every
+# stride window and is CPU-bound; at the IDF default 160 MHz it falls behind
+# the real-time audio frame rate. (Audio + wakeword are CPU-bound.)
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# RTOS — 1 kHz tick for 1 ms scheduling resolution (20 ms audio frame cadence)
+CONFIG_FREERTOS_HZ=1000
+
+# Optimise for performance, not size — audio + wakeword are CPU-bound
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Logging
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# Console over the native USB-Serial/JTAG peripheral. On the HA Voice Preview
+# Edition the USB-C port is wired to the ESP32-S3 native USB-Serial/JTAG (not a
+# UART bridge), so the default UART0 console TX never reaches the USB port and
+# on-device logs are invisible. Route the primary console to USB-Serial/JTAG so
+# `idf.py monitor` / serial readers see boot + runtime logs over USB-C.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# LWIP — bigger TCP buffers for TLS WSS audio streaming
+CONFIG_LWIP_TCP_RCV_BUF_DEFAULT=16384
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=16384
+
+# HA Voice Preview Edition has 16 MB flash.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# Custom partition table for dual-bank OTA (see partitions.csv)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# TLS via mbedTLS, with real time/date for cert validity checks
+CONFIG_ESP_TLS_USING_MBEDTLS=y
+CONFIG_MBEDTLS_HAVE_TIME_DATE=y
+
+# OTA — no decrypt callback (signed-image flow, not encrypted-image flow)
+CONFIG_ESP_HTTPS_OTA_DECRYPT_CB=n
+
+# WebSocket client buffers — bumped for audio WSS frames (20 ms PCM16 = 640 B
+# but TLS records and bursts can exceed default 1024 B easily).
+CONFIG_WEBSOCKET_CLIENT_RX_BUFFER_SIZE=4096
+CONFIG_WEBSOCKET_CLIENT_TX_BUFFER_SIZE=4096
+
+# Bluetooth (BLE) — required by first-boot Wi-Fi provisioning over BLE
+# (wifi_prov_scheme_ble). The provisioning manager advertises the
+# PATCH-xxxx GATT service; without BT_ENABLED + the NimBLE host the
+# wifi_prov_scheme_ble symbols are unresolved at link time. NimBLE is the
+# light host (BLE-only, no Classic) and is the one the wifi_provisioning
+# BLE scheme links against.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y

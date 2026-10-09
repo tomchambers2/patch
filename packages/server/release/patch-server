@@ -1,0 +1,76 @@
+#!/bin/sh
+# Runs the Patch server release this file sits in.
+#
+# A release is a self-contained directory (scripts/build-server.mjs):
+#
+#   patch-server        this launcher
+#   install             the installer
+#   server/             the server's dist and production node_modules
+#   web/                the SPA it serves at /app/
+#   build-info.json     the server's identity: version, gitSha, builtAt, serverSha
+#   server.env.example  the config template the installer starts from
+#
+# Everything the running server KEEPS lives outside the release, in the install
+# home (PATCH_SERVER_HOME, set by the systemd unit the installer writes):
+#
+#   data/       registry, jobs, attachments — the server's state
+#   downloads/  the update channel: daemon artifacts, APK, desktop feed
+#   server.env  secrets and config (the unit's EnvironmentFile)
+#
+# So replacing a release never touches state, and nothing here is a git
+# checkout. NO FALLBACKS: a missing home, node or stamp refuses to start.
+set -eu
+
+REL=$(cd "$(dirname "$0")" && pwd -P)
+
+# `patch-server pair` — a person at a shell asking the RUNNING server for a
+# pairing code, so it works without the unit's environment: the home is the one
+# this release is installed in, the node the one the installer provisioned (or
+# the one on PATH), and the config is server.env, as the unit would load it.
+if [ "${1:-}" = "pair" ] || [ "${1:-}" = "channel" ]; then
+  SUBCOMMAND="$1"
+  shift
+  PATCH_SERVER_HOME="${PATCH_SERVER_HOME:-$(cd "${REL}/../.." && pwd -P)}"
+  if [ -z "${PATCH_NODE:-}" ]; then
+    if [ -x "${PATCH_SERVER_HOME}/node/bin/node" ]; then PATCH_NODE="${PATCH_SERVER_HOME}/node/bin/node"; else PATCH_NODE=$(command -v node || true); fi
+  fi
+  [ -n "${PATCH_NODE}" ] || { echo "patch-server: no node found" >&2; exit 1; }
+  [ -f "${PATCH_SERVER_HOME}/server.env" ] || { echo "patch-server: ${PATCH_SERVER_HOME}/server.env does not exist — is this an installed server?" >&2; exit 1; }
+  set -a
+  . "${PATCH_SERVER_HOME}/server.env"
+  set +a
+  export PATCH_SERVER_HOME PATCH_DATA_DIR="${PATCH_SERVER_HOME}/data"
+  exec "${PATCH_NODE}" "${REL}/server/dist/scripts/${SUBCOMMAND}.js" "$@"
+fi
+
+: "${PATCH_SERVER_HOME:?PATCH_SERVER_HOME is not set — run the server through the unit the installer writes}"
+: "${PATCH_NODE:?PATCH_NODE is not set — run the server through the unit the installer writes}"
+
+for d in data downloads; do
+  if [ ! -d "${PATCH_SERVER_HOME}/${d}" ]; then
+    echo "patch-server: ${PATCH_SERVER_HOME}/${d} does not exist — re-run the installer" >&2
+    exit 1
+  fi
+done
+if [ ! -f "${REL}/server/dist/index.js" ] || [ ! -f "${REL}/web/index.html" ] || [ ! -f "${REL}/build-info.json" ]; then
+  echo "patch-server: ${REL} is not a complete release" >&2
+  exit 1
+fi
+
+read_info() {
+  "${PATCH_NODE}" -e "const v=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))[process.argv[2]]; if(typeof v!=='string'||!v) throw new Error('build-info.json has no '+process.argv[2]); process.stdout.write(v)" "${REL}/build-info.json" "$1"
+}
+
+# The layout is the release's, never the config's: these override anything
+# server.env says about them.
+export PATCH_DATA_DIR="${PATCH_SERVER_HOME}/data"
+export PATCH_DOWNLOADS_DIR="${PATCH_SERVER_HOME}/downloads"
+export PATCH_WEB_DIST="${REL}/web"
+export NODE_ENV=production
+PATCH_VERSION=$(read_info version)
+PATCH_GIT_SHA=$(read_info gitSha)
+PATCH_BUILT_AT=$(read_info builtAt)
+PATCH_SERVER_SHA=$(read_info serverSha)
+export PATCH_VERSION PATCH_GIT_SHA PATCH_BUILT_AT PATCH_SERVER_SHA
+
+exec "${PATCH_NODE}" "${REL}/server/dist/index.js"

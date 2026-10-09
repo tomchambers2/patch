@@ -1,0 +1,9 @@
+# Override for a SHARED host where Patch coexists with other sites behind a
+# host-level Caddy that already owns :80/:443 (e.g. the Hetzner box that also
+# serves /srv/apps, /srv/podcast). The host Caddy reverse-proxies
+# patch.tomchambers.me -> localhost:3000, where the native patch-server.service
+# is already listening.
+#
+# patch-server and patch-daemon are native systemd user services — NOT Docker.
+# See ~/.config/systemd/user/patch-server.service and patch-daemon.service.
+# There are no services to bring up here; this file is retained for reference.

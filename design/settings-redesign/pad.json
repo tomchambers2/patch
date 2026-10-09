@@ -1,0 +1,64 @@
+{
+  "screens": [
+    {
+      "id": "settings",
+      "name": "Settings",
+      "path": "index.html"
+    },
+    {
+      "id": "credit",
+      "name": "Usage",
+      "path": "index.html#credit"
+    },
+    {
+      "id": "agent",
+      "name": "Agent",
+      "path": "index.html#agent"
+    },
+    {
+      "id": "mcp",
+      "name": "MCP",
+      "path": "index.html#mcp"
+    },
+    {
+      "id": "memories",
+      "name": "Memories",
+      "path": "index.html#memories"
+    },
+    {
+      "id": "manager",
+      "name": "Manager",
+      "path": "index.html#manager"
+    },
+    {
+      "id": "voice",
+      "name": "Voice",
+      "path": "index.html#voice"
+    },
+    {
+      "id": "machines",
+      "name": "Hosts",
+      "path": "index.html#machines"
+    },
+    {
+      "id": "keys",
+      "name": "Keys",
+      "path": "index.html#keys"
+    },
+    {
+      "id": "devices",
+      "name": "Devices",
+      "path": "index.html#devices"
+    },
+    {
+      "id": "updates",
+      "name": "Updates",
+      "path": "index.html#updates"
+    },
+    {
+      "id": "account",
+      "name": "Account",
+      "path": "index.html#account"
+    }
+  ]
+}

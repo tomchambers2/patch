@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>patch — dev harness (Sidebar + Composer policy)</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      DEV-ONLY visual harness. Mounts the REAL Sidebar + ChatRoute components
+      against hydrated mock stores so the spec/06 presentational behaviours
+      (Channels section collapsed by default; Speakers read-only
+      mirror composer) can be verified in a real browser with a screenshot,
+      without standing up the full server+daemon+pairing stack. Not part of the
+      production bundle (only `index.html` is the app entry).
+    -->
+    <script type="module" src="/src/dev-harness.tsx"></script>
+  </body>
+</html>

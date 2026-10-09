@@ -1,0 +1,178 @@
+# Test stack — locally bring up server + host + Caddy on plain HTTP. No TLS,
+# no public DNS. The shared /data volume (host /tmp/patch-data) is scratch and
+# wiped per run with `down -v`.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up --build
+#
+# After up (host ports are offset to avoid colliding with dev servers):
+#   curl http://localhost:13000/api/healthz
+#   curl http://localhost:13000/api/daemon/healthz   # 200 once the daemon links
+#   curl http://localhost:13000/app/
+#
+# Host↔server link in the test stack: the host authenticates by dialing the
+# server's /ws with an EdDSA-JWT daemonKey signed by the account user key
+# (spec/10). There is no human to scan the QR here, so the one-shot `seed`
+# service below mints that account + daemonKey BEFORE the server boots, using
+# the same fixtures the server image already ships
+# (dist/scripts/mint-surface-jwt.js + mint-daemon-key.js). It writes:
+#   - /data/.user-keypair.json + /data/registry.json  → the server reads these
+#     (PATCH_DATA_DIR=/data) so an account is bootstrapped and the daemonKey is
+#     a recognised DaemonKeyRecord (the WS hello gate rejects unknown hosts).
+#   - /data/daemon-home/daemon.key                     → the host reads this
+#     (PATCH_HOME=/data/daemon-home) instead of falling into the QR flow.
+# server + host both depend_on the seed completing successfully, and the
+# server loads registry.json once at startup, so ordering is load-bearing.
+
+services:
+  # One-shot account + daemonKey seeder. Exits 0 when done.
+  seed:
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+      args:
+        PATCH_GIT_SHA: testsha
+        PATCH_VERSION: 0.0.0-test
+    environment:
+      NODE_ENV: production
+      PATCH_DATA_DIR: /data
+    volumes:
+      - /tmp/patch-data:/data
+    entrypoint:
+      - /sbin/tini
+      - --
+      - sh
+      - -c
+      - |
+        set -e
+        mkdir -p /data/daemon-home
+        # 1) Generate the account user keypair + bootstrap the singleton account
+        #    into /data/registry.json (idempotent; mint-surface-jwt reuses an
+        #    existing keypair on re-run).
+        node dist/scripts/mint-surface-jwt.js \
+          --account patch-test --surface seed-web --kind web --data-dir /data \
+          >/dev/null
+        # 2) Mint a long-lived daemonKey signed by that account key, record it
+        #    in the registry (so the server's WS hello accepts it), and write it
+        #    where the host reads it (PATCH_HOME=/data/daemon-home).
+        node dist/scripts/mint-daemon-key.js \
+          --data-dir /data --patch-home /data/daemon-home \
+          --daemon-id test-daemon-1 --label test-stack
+        echo "seed: account + daemonKey written to /data"
+
+  server:
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+      args:
+        PATCH_GIT_SHA: testsha
+        PATCH_VERSION: 0.0.0-test
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOST: 0.0.0.0
+      PATCH_DATA_DIR: /data
+      # PATCH_INTERNAL_TOKEN is now used ONLY for voice session tokens (spec/13),
+      # shared with the host's audio WSS. The host↔server control link no
+      # longer uses it — the host authenticates by dialing /ws with its
+      # EdDSA-JWT daemonKey (spec/10). DAEMON_HEALTHZ_URL / PATCH_DAEMON_UPSTREAM_URL
+      # are gone: host liveness is now derived from the inbound /ws connection.
+      PATCH_INTERNAL_TOKEN: test-internal-token-not-for-prod-aaaa
+      LOG_LEVEL: info
+      # spec/09 + group B2 "Channel credentials — fail at startup": the server
+      # now ABORTS in production when no push-channel credential is configured
+      # (no silent degraded mode). The test stack therefore supplies a clearly
+      # labelled FIXTURE FCM service-account JSON so boot validation passes.
+      # The private_key is a syntactically-valid placeholder; push sends are
+      # never made in the test stack (firebase-admin is lazy-init on first send,
+      # which never happens here).
+      FIREBASE_SERVICE_ACCOUNT_JSON: >-
+        {"type":"service_account","project_id":"patch-test-fixture","private_key_id":"fixturekeyid","private_key":"-----BEGIN PRIVATE KEY-----\nMIGfixturenotrealkeymaterialaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n-----END PRIVATE KEY-----\n","client_email":"fixture@patch-test-fixture.iam.gserviceaccount.com","client_id":"000000000000000000000","token_uri":"https://oauth2.googleapis.com/token"}
+    volumes:
+      - /tmp/patch-data:/data
+    depends_on:
+      seed:
+        # The server loads registry.json ONCE at startup, so the account +
+        # daemonKey record must already be on disk before it boots.
+        condition: service_completed_successfully
+    ports:
+      # Host 13000 → container 3000. Port 3000 on the host is often in use
+      # (user has unrelated dev servers). Tests still hit /api/healthz on
+      # localhost:13000.
+      - '13000:3000'
+
+  daemon:
+    build:
+      context: .
+      dockerfile: packages/daemon/Dockerfile
+      args:
+        PATCH_GIT_SHA: testsha
+        PATCH_VERSION: 0.0.0-test
+    environment:
+      NODE_ENV: production
+      # Group 13: voice infrastructure. This stack proves ONE thing — that the
+      # host's audio WSS at :3003 comes up and links to the server. It proves
+      # nothing about transcription, speech or Claude, and must not be read as if
+      # it did; those are exercised for real in the integration round against a
+      # real-voice stack. The four mocks below are what let the container come up
+      # without GROQ_API_KEY, the Python sidecars, or the silero model (which the
+      # host would otherwise abort on, since silero is its default).
+      # Production sets WHISPER_BACKEND=groq + GROQ_API_KEY, KOKORO_BACKEND=real
+      # + the sidecar, VAD_BACKEND=silero + the model.
+      # mock-check:allow link-only stack; voice+SDK proven for real in the integration round
+      WHISPER_BACKEND: mock
+      # mock-check:allow link-only stack; real Kokoro sidecar is not in this image
+      KOKORO_BACKEND: mock
+      # mock-check:allow link-only stack; silero model is not in this image
+      VAD_BACKEND: mock
+      KOKORO_MODEL_PATH: /models/kokoro
+      PATCH_DAEMON_AUDIO_PORT: '3003'
+      # mock-check:allow link-only stack; a real turn needs credentials this image has not got
+      SDK_BACKEND: mock
+      PATCH_INTERNAL_TOKEN: test-internal-token-not-for-prod-aaaa
+      PATCH_DAEMON_LOCAL_KEY: test-local-key-not-for-prod-aaaa
+      # Read the seeded daemon.key from the shared /data volume instead of
+      # falling into the QR flow (no human to scan it in the test stack). The
+      # control UDS still lives on tmpfs at /root/.patch/daemon.sock (set in the
+      # daemon Dockerfile via PATCH_DAEMON_SOCKET).
+      PATCH_HOME: /data/daemon-home
+      # Inverted link (spec/10): the host dials INTO the server's /ws with its
+      # EdDSA-JWT daemonKey. It no longer runs an inbound control server on :3002.
+      PATCH_SERVER_WS_URL: ws://server:3000/ws
+      PATCH_SERVER_URL: http://server:3000
+    volumes:
+      # Shared /data: the host reads the seeded /data/daemon-home/daemon.key
+      # (PATCH_HOME) and the /data/pending + /data/jobs the server writes.
+      - /tmp/patch-data:/data
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      server:
+        condition: service_started
+    expose:
+      - '3001'
+      - '3003'
+    ports:
+      # Host 13003 → container 3003 (audio WSS). Required for the
+      # audio-WSS green-path integration test (B-24-2): the test runs on the
+      # host and needs to open `ws://localhost:13003/audio/<sessionId>`
+      # against the running host. NOT for production — the production
+      # daemon runs behind Caddy on the same docker network.
+      - '13003:3003'
+    tmpfs:
+      - /root/.claude
+      - /models
+
+  caddy:
+    image: caddy:2
+    # No PATCH_PUBLIC_HOST: leave the public TLS site at its default
+    # patch.tomchambers.me, which won't match localhost and so won't auto-
+    # provision certs in the test stack. The plain `:80` site block in
+    # Caddyfile catches localhost.
+    ports:
+      # Host 18080 → container 80 (Caddy reverse proxy, plain http for tests).
+      - '18080:80'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - server

@@ -1,0 +1,67 @@
+# Maestro smoke flow for the Patch Android app.
+#
+# Pre-req: device has the dev or preview build installed; the test stack is
+# running and a valid pairing JWT can be supplied via the deep link below.
+#
+# Usage (local):
+#   maestro test apps/mobile/maestro/flows/smoke.yml \
+#     --env CRED=eyJhbGciOiJFZERTQSJ9... --env SERVER=<origin>
+#
+# What it covers (per group 21 DoD):
+#   1. Launch the app cold.
+#   2. Pair via deep link (skips the camera scan).
+#   3. Land on Chats tab.
+#   4. Switch to Settings, then Voice (Manager), then Chats again.
+#   5. Open the NEW CHAT flow and confirm the folder picker renders.
+#   6. Open the first chat and send a message.
+#   7. Capture screenshots at each step for visual review.
+#
+# Step 5 is not optional garnish. This flow used to skip the new-chat screen on
+# the reasoning that not covering it meant store changes could not rot the flow —
+# and the screen then shipped rendering nothing at all. The unattended version of
+# this journey is `pnpm smoke:android` (scripts/mobile-surface-smoke.mjs), which
+# is what actually gates a deploy; keep the two in step.
+
+appId: io.github.tomchambers2.patch
+---
+- launchApp:
+    clearState: true
+
+# Inject a pairing credential via the dev deep link. The CRED env must be a
+# valid surface-mobile JWT for the test account. Assert the Channels section
+# header, not chat data — it renders unconditionally regardless of whether
+# the WS has hydrated chats yet (there is no wordmark/header bar to check
+# against any more — removed, it just ate vertical space).
+- openLink: 'patch://?credential=${CRED}&server=${SERVER}'
+- assertVisible: 'Channels'
+- takeScreenshot: 01-chats-empty
+
+# Navigate to Settings tab → assert account section renders.
+- tapOn: 'Settings'
+- assertVisible: 'Account'
+- takeScreenshot: 02-settings
+
+# Navigate to the Voice tab → opens the Manager thread directly.
+- tapOn: 'Voice'
+- takeScreenshot: 03-manager
+
+# New chat: the folder picker must actually render. A blank screen here is the
+# regression this step exists for — it is not a crash, so nothing else notices.
+- tapOn: 'New chat'
+- assertVisible: 'Pick a folder'
+- takeScreenshot: 03b-new-chat
+- tapOn: 'Cancel'
+
+# Back to Chats and open whatever chat lands first (test seeder should have
+# spawned at least one).
+- tapOn: 'Chats'
+- assertVisible: 'Manager'
+- tapOn: 'Manager'
+- takeScreenshot: 04-chat-detail
+
+# Type + send a message.
+- tapOn:
+    id: 'Message'
+- inputText: 'smoke test from maestro'
+- tapOn: 'Send message'
+- takeScreenshot: 05-after-send

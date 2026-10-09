@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — Android widgets (home screen)</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .home-screen { align-items: center; }
+  .phone-content { width: 100%; max-width: 460px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .widget-row { display: flex; gap: 12px; }
+
+  /* glance — small 2x2 */
+  .glance {
+    flex: 1;
+    aspect-ratio: 1 / 1;
+    padding: 14px;
+    display: flex; flex-direction: column;
+  }
+  .glance .count {
+    margin-top: auto;
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: 40px;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .glance .count-label {
+    font-size: 12.5px;
+    color: var(--ink-3);
+    margin-top: 2px;
+  }
+  .glance .since {
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    margin-top: 10px;
+  }
+
+  /* quick chat — small 2x2 action */
+  .quick-chat {
+    flex: 1;
+    aspect-ratio: 1 / 1;
+    background: var(--accent-strong);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px;
+  }
+  .quick-chat .mic {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.14);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .quick-chat .label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--bg-elevated);
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  /* chats — medium 4x2 */
+  .chats-widget { padding: 14px 16px 6px; }
+  .chats-widget .head { display: flex; align-items: center; margin-bottom: 10px; }
+  .chats-widget .head .meta { margin-left: auto; font-size: 11.5px; color: var(--accent-strong); font-weight: 600; }
+  .chat-row { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: baseline; padding: 7px 0; }
+  .chat-row + .chat-row { border-top: 1px solid var(--line-soft); }
+  .chat-row .status { text-align: center; }
+  .chat-row .name { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-row .preview { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .chat-row .when { font-size: 10.5px; color: var(--ink-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div class="home-screen">
+<div class="phone-content">
+
+  <div class="status-bar">
+    <span>9:41</span>
+    <div class="icons"><span>5G</span><span>▮▮▮▮</span><span>🔋</span></div>
+  </div>
+
+  <div class="icon-grid">
+    <div class="icon-slot"><div class="app-icon">☎</div><span class="label">Phone</span></div>
+    <div class="icon-slot"><div class="app-icon">✉</div><span class="label">Gmail</span></div>
+    <div class="icon-slot"><div class="app-icon">📷</div><span class="label">Camera</span></div>
+    <div class="icon-slot"><div class="app-icon">🗺</div><span class="label">Maps</span></div>
+  </div>
+
+  <div class="widget-area">
+    <div class="widget-row">
+      <div class="widget-card glance">
+        <div class="widget-brand"><span class="name">patch</span><span class="dot"></span></div>
+        <div class="count">2</div>
+        <div class="count-label">need you</div>
+        <div class="since">updated 1m ago</div>
+      </div>
+      <div class="widget-card quick-chat">
+        <div class="mic">
+          <svg viewBox="0 0 24 24" width="20" height="20" stroke="#fdfaf2" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </div>
+        <div class="label">Talk to<br>patch</div>
+      </div>
+    </div>
+
+    <div class="widget-card chats-widget">
+      <div class="widget-brand head"><span class="name">patch</span><span class="dot"></span><span class="meta">3 active</span></div>
+      <div class="chat-row">
+        <span class="status"><span class="badge permission"></span></span>
+        <div>
+          <div class="name">fix layout bug</div>
+          <div class="preview">edit src/layout.ts — needs your OK</div>
+        </div>
+        <span class="when">2m</span>
+      </div>
+      <div class="chat-row">
+        <span class="status"><span class="badge working"></span></span>
+        <div>
+          <div class="name">deploy to vercel</div>
+          <div class="preview">running build…</div>
+        </div>
+        <span class="when">just now</span>
+      </div>
+      <div class="chat-row">
+        <span class="status"><span class="badge read">✓</span></span>
+        <div>
+          <div class="name">Home Assistant</div>
+          <div class="preview">porch lights off · 14:08</div>
+        </div>
+        <span class="when">14:08</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="dock">
+    <div class="app-icon">☎</div>
+    <div class="app-icon">💬</div>
+    <div class="app-icon patch">p</div>
+    <div class="app-icon">📷</div>
+  </div>
+
+  <div class="gesture-bar"><div class="pill"></div></div>
+
+</div>
+</div>
+
+</body>
+</html>

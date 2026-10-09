@@ -1,0 +1,5 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - '!packages/voice-firmware'
+  - 'packages/voice-firmware/mock'

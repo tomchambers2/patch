@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Patch — side threads and chat graph</title>
+<style>
+:root{--bg-app:#ebe7dc;--bg-panel:#f4f0e4;--bg-elevated:#fdfaf2;--bg-soft:#efebde;--ink:#1c1814;--ink-2:#4a4239;--ink-3:#857d72;--ink-faint:#b3aca0;--line:#d6cfba;--line-soft:#e3ddc8;--accent:#4f7a3e;--accent-soft:#cad9be;--accent-strong:#3a5e2c;--accent-tint:#e3ecdb;--waiting:#c46a12;--permission:#5b5bd6;--radius-sm:6px;--radius:10px;--radius-lg:16px;--radius-pill:999px;--shadow-sm:0 1px 2px rgba(40,30,15,.06);--shadow:0 6px 18px rgba(40,30,15,.08),0 1px 3px rgba(40,30,15,.05);--shadow-lg:0 14px 32px rgba(40,30,15,.10),0 2px 6px rgba(40,30,15,.06)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg-app);color:var(--ink);font:14px/1.5 Inter,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+.switch{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:4px;background:var(--bg-elevated);border:1px solid var(--line);border-radius:var(--radius-pill);padding:3px;box-shadow:var(--shadow)}
+.switch button{border:0;background:none;padding:5px 14px;border-radius:var(--radius-pill);color:var(--ink-2)}
+.switch button.on{background:var(--accent);color:#fff}
+.app{display:flex;height:100vh}
+.sidebar{width:232px;flex:none;background:var(--bg-panel);border-right:1px solid var(--line);padding:14px 10px}
+.wordmark{font-family:Fraunces,Georgia,serif;font-size:22px;color:var(--accent);padding:0 8px 12px}
+.srow{padding:6px 8px;border-radius:var(--radius-sm);color:var(--ink-2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow.sel{background:var(--bg-elevated);color:var(--ink);box-shadow:var(--shadow-sm)}
+.slabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:12px 8px 4px}
+.main{flex:1;display:flex;min-width:0}
+.chat{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg-panel)}
+.head{height:52px;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--line)}
+.head h1{font-size:15px;font-weight:600;margin:0;flex:1}
+.icon{width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid transparent;background:none;display:grid;place-items:center;color:var(--ink-2)}
+.icon:hover,.icon.on{background:var(--bg-elevated);border-color:var(--line)}
+.icon.on{color:var(--accent)}
+.stream{flex:1;overflow:auto;padding:18px 24px}
+.msg{max-width:640px;margin:0 0 14px;position:relative}
+.msg.user{margin-left:auto;background:var(--bg-elevated);border:1px solid var(--line-soft);border-radius:var(--radius);padding:9px 13px;max-width:520px}
+.msg.agent{color:var(--ink)}
+.msg .branchbtn{position:absolute;right:-34px;top:4px;opacity:0;transition:.15s}
+.msg.agent .branchbtn{right:auto;left:-34px}
+.msg:hover .branchbtn{opacity:1}
+.marker{display:inline-flex;align-items:center;gap:7px;margin-top:6px;font-size:12px;color:var(--accent-strong);background:var(--accent-tint);border-radius:var(--radius-pill);padding:3px 10px;border:0}
+.marker .dot{width:7px;height:7px;border-radius:50%;background:var(--waiting)}
+.backrow{margin:0 0 14px;font-size:12px;color:var(--ink-3);border-left:2px solid var(--accent-soft);padding:4px 10px}
+.backrow b{color:var(--ink-2);font-weight:500}
+.composer{margin:0 20px 16px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;color:var(--ink-faint)}
+.threads{width:44%;min-width:380px;flex:none;border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--bg-panel)}
+.tabs{display:flex;align-items:flex-end;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line);height:52px}
+.tab{display:flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid transparent;border-bottom:0;border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:13px;color:var(--ink-3);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab.on{background:var(--bg-panel);border-color:var(--line);color:var(--ink);margin-bottom:-1px}
+.tab .dot{width:7px;height:7px;border-radius:50%;flex:none}
+.tabs .sp{flex:1}
+.from{margin:14px 24px 4px;font-size:12px;color:var(--ink-3)}
+.from q{color:var(--ink-2)}
+.tfoot{display:flex;gap:8px;margin:0 20px 8px}
+.btn{border:1px solid var(--line);background:var(--bg-elevated);border-radius:var(--radius-sm);padding:6px 12px;font-size:13px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+/* graph */
+#graph{display:none;flex:1;position:relative;overflow:hidden;background:var(--bg-panel)}
+#graph svg{width:100%;height:100%;cursor:grab;display:block}
+#graph svg.drag{cursor:grabbing}
+.node rect{fill:var(--bg-elevated);stroke:var(--line);stroke-width:1}
+.node.user rect{fill:#fff}
+.node.active rect{stroke:var(--accent);stroke-width:2}
+.node.sel rect{stroke:var(--ink);stroke-width:2}
+.node text{font-size:12px;fill:var(--ink-2);pointer-events:none}
+.node .who{font-size:10px;fill:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.node{cursor:pointer}
+.edge{fill:none;stroke:var(--line);stroke-width:2}
+.edge.active{stroke:var(--accent-soft);stroke-width:3}
+.edge.back{stroke:var(--accent);stroke-dasharray:4 4;stroke-width:1.5}
+.lane{font-size:11px;fill:var(--ink-3);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.gtools{position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px}
+.gtools button{width:34px;height:34px;border-radius:var(--radius-sm);border:1px solid var(--line);background:var(--bg-elevated);box-shadow:var(--shadow-sm)}
+.peek{position:absolute;left:16px;top:16px;width:330px;background:var(--bg-elevated);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:14px}
+.peek h3{margin:0 0 4px;font-size:13px}
+.peek .meta{font-size:12px;color:var(--ink-3);margin-bottom:10px}
+.peek p{margin:0 0 12px;font-size:13px;color:var(--ink-2)}
+.peek .row{display:flex;gap:8px}
+.minihead{height:52px;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--bg-panel)}
+.minihead h1{font-size:15px;font-weight:600;margin:0;flex:1}
+</style>
+</head>
+<body>
+<div class="switch"><button class="on" data-v="threads">Threads</button><button data-v="graph">Graph</button></div>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="wordmark">patch</div>
+    <div class="slabel">patch</div>
+    <div class="srow sel">Pricing page rewrite</div>
+    <div class="srow">Deploy pipeline flake</div>
+    <div class="srow">Mobile dark mode</div>
+    <div class="slabel">portfolio</div>
+    <div class="srow">Trip planner</div>
+  </aside>
+
+  <div class="main" id="threadsView">
+    <section class="chat">
+      <div class="head">
+        <h1>Pricing page rewrite</h1>
+        <button class="icon on" title="Threads">⑂</button>
+        <button class="icon" title="Graph" onclick="show('graph')">◎</button>
+      </div>
+      <div class="stream">
+        <div class="msg user">Rewrite the pricing page so the three tiers read clearly on mobile.</div>
+        <div class="msg agent">I've restructured it into stacked cards with the price first and a single feature list per tier. The comparison table is now a toggle.
+          <button class="icon branchbtn" title="Side thread">⑂</button>
+          <div><button class="marker"><span class="dot"></span>Side thread · 6 messages · running</button></div>
+        </div>
+        <div class="msg user">Keep the table visible on desktop though.</div>
+        <div class="msg agent">Done: the table shows at 1024px and up, the toggle only below that.
+          <button class="icon branchbtn" title="Side thread">⑂</button>
+          <div><button class="marker">Side thread · 3 messages</button></div>
+        </div>
+        <div class="backrow">From side thread <b>“Annual vs monthly”</b>: show annual by default, monthly as a toggle; annual saves 17%, say it on the toggle.</div>
+        <div class="msg user">Good, apply that.</div>
+      </div>
+      <div class="composer">Message</div>
+    </section>
+
+    <section class="threads">
+      <div class="tabs">
+        <div class="tab on"><span class="dot" style="background:var(--waiting)"></span>Annual vs monthly</div>
+        <div class="tab"><span class="dot" style="background:var(--accent)"></span>Table on tablets</div>
+        <div class="tab"><span class="dot" style="background:var(--ink-faint)"></span>Copy tone</div>
+        <div class="sp"></div>
+        <button class="icon" title="Close">✕</button>
+      </div>
+      <div class="from">Off <q>I've restructured it into stacked cards…</q></div>
+      <div class="stream">
+        <div class="msg user">Should we default to annual or monthly?</div>
+        <div class="msg agent">Annual by default converts better for this kind of product, as long as monthly is one tap away and the saving is stated on the toggle.
+          <button class="icon branchbtn" title="Side thread">⑂</button></div>
+        <div class="msg user">What's the saving at current prices?</div>
+        <div class="msg agent">17% on all three tiers (£120/yr vs £12/mo).
+          <button class="icon branchbtn" title="Side thread">⑂</button>
+          <div><button class="marker">Side thread · 2 messages</button></div>
+        </div>
+      </div>
+      <div class="tfoot"><button class="btn primary">Send back to chat</button></div>
+      <div class="composer">Message</div>
+    </section>
+  </div>
+
+  <div id="graph">
+    <div class="minihead" style="position:absolute;left:0;right:0;top:0;z-index:3">
+      <h1>Pricing page rewrite</h1>
+      <button class="icon" title="Threads" onclick="show('threads')">⑂</button>
+      <button class="icon on" title="Canvas">◎</button>
+    </div>
+    <div id="viewport"><svg id="links"></svg><div id="plane"></div></div>
+    <div class="gtools"><button id="zin">+</button><button id="zout">−</button><button id="fit">⤢</button></div>
+  </div>
+</div>
+<style>
+#viewport{position:absolute;inset:52px 0 0 0;overflow:hidden;cursor:grab;background:radial-gradient(ellipse at 30% 20%,#f3efe4 0,var(--bg-app) 70%)}
+#viewport.drag{cursor:grabbing}
+#plane,#links{position:absolute;left:0;top:0;transform-origin:0 0}
+#links{overflow:visible;pointer-events:none;width:1px;height:1px}
+#links path{fill:none;stroke:var(--accent);stroke-opacity:.35;stroke-width:2;stroke-linecap:round}
+#links path.back{stroke-dasharray:2 7;stroke-opacity:.6}
+#links path.spine{stroke:var(--ink-faint);stroke-opacity:.35;stroke-width:1.5}
+.thread{position:absolute;width:360px}
+.thread .title{font-size:12px;font-weight:600;color:var(--ink-3);letter-spacing:.02em;margin:0 0 10px 4px;display:flex;align-items:center;gap:8px;cursor:grab;user-select:none}
+.thread.trunk .title{font-family:Fraunces,Georgia,serif;font-size:17px;font-weight:500;color:var(--ink);letter-spacing:0}
+.thread .title .dot{width:7px;height:7px;border-radius:50%}
+.thread .title .sendback{margin-left:auto;font-weight:500;font-size:12px;color:var(--accent-strong);background:none;border:0;padding:0}
+.bubble{position:relative;margin:0 0 12px;font-size:13.5px;line-height:1.5;color:var(--ink)}
+.bubble.u{background:var(--bg-elevated);border-radius:18px 18px 4px 18px;padding:9px 14px;margin-left:44px;box-shadow:var(--shadow-sm)}
+.bubble.a{padding:2px 4px 2px 4px}
+.bubble.hasfork::after{content:'';position:absolute;right:-18px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--accent)}
+.bubble .br{position:absolute;right:-44px;top:50%;margin-top:-14px;width:28px;height:28px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:14px;display:grid;place-items:center;opacity:0;transform:scale(.7);transition:.15s;box-shadow:var(--shadow)}
+.bubble:hover .br{opacity:1;transform:scale(1)}
+.backnote{font-size:12.5px;color:var(--accent-strong);margin:0 0 12px;padding:6px 12px;border-radius:14px;background:var(--accent-tint)}
+.typing{font-size:12px;color:var(--waiting);margin:0 0 12px 4px}
+.comp{margin-top:6px;background:rgba(255,255,255,.85);border-radius:22px;padding:9px 16px;font-size:13.5px;color:var(--ink-faint);box-shadow:var(--shadow-sm);outline:none;min-height:38px}
+.comp:focus{color:var(--ink);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow-sm)}
+.comp:empty::before{content:'Message';color:var(--ink-faint)}
+.thread.fresh{animation:in .35s ease-out}
+@keyframes in{from{opacity:0;transform:translateX(-20px)}}
+</style>
+<script>
+function show(v){
+  document.querySelectorAll('.switch button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  document.getElementById('threadsView').style.display=v==='threads'?'flex':'none';
+  document.getElementById('graph').style.display=v==='graph'?'block':'none';
+  if(v==='graph') requestAnimationFrame(fit);
+}
+document.querySelectorAll('.switch button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+document.querySelector('.switch button[data-v=graph]').textContent='Canvas';
+
+const threads=[
+ {id:'main',name:'Pricing page rewrite',x:0,y:0,main:1,msgs:[
+   ['u','Rewrite the pricing page so the three tiers read clearly on mobile.'],
+   ['a',"Restructured into stacked cards, price first, one feature list per tier. The comparison table is now a toggle."],
+   ['u','Keep the table visible on desktop though.'],
+   ['a','Done: the table shows at 1024px and up, the toggle only below that.'],
+   ['back','From Annual vs monthly: annual by default, “2 months free” on the toggle.'],
+   ['u','Good, apply that.'],
+   ['a','Applied. Deploying a preview now…']]},
+ {id:'annual',name:'Annual vs monthly',x:470,y:40,dot:'var(--accent)',from:['main',1],sent:1,msgs:[
+   ['u','Should we default to annual or monthly?'],
+   ['a','Annual by default, as long as monthly is one tap away and the saving is stated on the toggle.'],
+   ['u',"What's the saving at current prices?"],
+   ['a','17% on all three tiers (£120/yr vs £12/mo).']]},
+ {id:'copy',name:'Toggle wording',x:940,y:230,dot:'var(--waiting)',from:['annual',3],msgs:[
+   ['u','Word the saving for the toggle, short.'],
+   ['a','“2 months free” reads better than “save 17%” and fits on one line.'],
+   ['u','Three more options'],
+   ['typing','Writing…']]},
+ {id:'tablet',name:'Table on tablets',x:470,y:470,dot:'var(--ink-faint)',from:['main',3],msgs:[
+   ['u','What happens between 768 and 1024px?'],
+   ['a','Right now the toggle. The table would fit from 768px if the feature column wraps.']]},
+];
+const plane=document.getElementById('plane'),links=document.getElementById('links');
+const els={};
+function render(t,fresh){
+  const d=document.createElement('div');d.className='thread'+(t.main?' trunk':'')+(fresh?' fresh':'');
+  d.style.left=t.x+'px';d.style.top=t.y+'px';
+  d.innerHTML=`<div class="title">${t.main?'':`<span class="dot" style="background:${t.dot}"></span>`}${t.name}${t.main?'':`<button class="sendback">${t.sent?'Sent back':'Send back'}</button>`}</div>
+   ${t.msgs.map((m,i)=>msgHtml(m,i)).join('')}
+   <div class="comp" contenteditable="true"></div>`;
+  plane.appendChild(d);els[t.id]=d;
+  d.querySelector('.comp').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();const c=e.target,txt=c.textContent.trim();if(!txt)return;t.msgs.push(['u',txt]);c.insertAdjacentHTML('beforebegin',msgHtml(['u',txt],t.msgs.length-1));c.textContent='';wire(t);drawLinks()}});
+  wire(t);
+}
+const msgHtml=(m,i)=>m[0]==='back'?`<div class="backnote">${m[1]}</div>`:m[0]==='typing'?`<div class="typing">${m[1]}</div>`:`<div class="bubble ${m[0]}" data-i="${i}">${m[1]}<button class="br" title="Branch">⑂</button></div>`;
+function wire(t){els[t.id].querySelectorAll('.br').forEach(b=>b.onclick=e=>{e.stopPropagation();branch(t,+b.parentNode.dataset.i)})}
+let n=0;
+function branch(t,i){
+  const src=els[t.id].querySelector(`.bubble[data-i="${i}"]`);
+  const y=t.y+src.offsetTop-20;
+  const siblings=threads.filter(o=>o.from&&o.from[0]===t.id).length;
+  const nt={id:'b'+(++n),name:'New branch',x:t.x+470,y:y+siblings*60,dot:'var(--ink-faint)',from:[t.id,i],msgs:[]};
+  threads.push(nt);render(nt,1);mark();drawLinks();
+  const c=els[nt.id].querySelector('.comp');c.focus();
+}
+function mark(){threads.forEach(t=>{if(t.from)els[t.from[0]].querySelector(`.bubble[data-i="${t.from[1]}"]`).classList.add('hasfork')})}
+threads.forEach(t=>render(t));mark();
+const ns='http://www.w3.org/2000/svg';
+function drawLinks(){
+  links.innerHTML='';const pr=plane.getBoundingClientRect();
+  const loc=el=>{const r=el.getBoundingClientRect();return{x:(r.left-pr.left)/k,y:(r.top-pr.top)/k,w:r.width/k,h:r.height/k}};
+  const path=(d,cls)=>{const p=document.createElementNS(ns,'path');p.setAttribute('d',d);if(cls)p.setAttribute('class',cls);links.appendChild(p)};
+  threads.forEach(t=>{if(!t.from)return;
+    const m=loc(els[t.from[0]].querySelector(`.bubble[data-i="${t.from[1]}"]`)),h=loc(els[t.id].querySelector('.title'));
+    const x1=m.x+m.w+18,y1=m.y+m.h/2,x2=h.x-6,y2=h.y+h.h/2;
+    path(`M${x1},${y1} C${x1+80},${y1} ${x2-80},${y2} ${x2},${y2}`);
+  });
+  const s=loc(els.annual.querySelector('.bubble[data-i="3"]')),b=loc(els.main.querySelector('.backnote'));
+  path(`M${s.x-8},${s.y+s.h/2} C${s.x-70},${s.y+s.h/2} ${b.x+b.w+70},${b.y+b.h/2} ${b.x+b.w+6},${b.y+b.h/2}`,'back');
+}
+const vp=document.getElementById('viewport');let k=1,tx=0,ty=0;
+function apply(){const t=`translate(${tx}px,${ty}px) scale(${k})`;plane.style.transform=t;links.style.transform=t;drawLinks()}
+function fit(){const r=vp.getBoundingClientRect();const W=1320,H=820;k=Math.min((r.width-80)/W,(r.height-60)/H,1);tx=(r.width-W*k)/2;ty=36;apply()}
+function zoom(f,cx,cy){const r=vp.getBoundingClientRect();cx??=r.width/2;cy??=r.height/2;tx=cx-(cx-tx)*f;ty=cy-(cy-ty)*f;k*=f;apply()}
+vp.addEventListener('wheel',e=>{e.preventDefault();const r=vp.getBoundingClientRect();if(e.ctrlKey||e.metaKey)zoom(e.deltaY<0?1.1:1/1.1,e.clientX-r.left,e.clientY-r.top);else{tx-=e.deltaX;ty-=e.deltaY;apply()}},{passive:false});
+let drag=null;
+vp.onpointerdown=e=>{const head=e.target.closest('.title');if(e.target.closest('.thread')&&!head)return;if(e.target.closest('button'))return;
+  drag=head?{el:head.parentNode,x:e.clientX,y:e.clientY,l:parseFloat(head.parentNode.style.left),t:parseFloat(head.parentNode.style.top)}:{x:e.clientX-tx,y:e.clientY-ty};vp.classList.add('drag')};
+onpointermove=e=>{if(!drag)return;if(drag.el){drag.el.style.left=drag.l+(e.clientX-drag.x)/k+'px';drag.el.style.top=drag.t+(e.clientY-drag.y)/k+'px';const t=threads.find(o=>els[o.id]===drag.el);t.x=parseFloat(drag.el.style.left);t.y=parseFloat(drag.el.style.top);drawLinks()}else{tx=e.clientX-drag.x;ty=e.clientY-drag.y;apply()}};
+onpointerup=()=>{drag=null;vp.classList.remove('drag')};
+zin.onclick=()=>zoom(1.2);zout.onclick=()=>zoom(1/1.2);document.getElementById('fit').onclick=fit;
+</script>
+</body>
+</html>

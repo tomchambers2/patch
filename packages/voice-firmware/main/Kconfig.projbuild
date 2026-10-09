@@ -1,0 +1,147 @@
+menu "Patch voice device"
+
+    config PATCH_SERVER_URL
+        string "Patch server base URL"
+        default "https://patch.example.com"
+        help
+            Public HTTPS URL of the patch server. Used for first-boot QR-link
+            pairing and OTA manifest fetches.
+
+            WARNING: the default value above is a placeholder. The firmware
+            asserts at boot (see patch_boot_check_server_url() in
+            components/patch_state) that this is NOT the placeholder and is
+            non-empty — booting with the default produces an ESP_LOGE and
+            esp_restart() loop until you reconfigure. This is deliberate
+            (spec/principles.md: fail loud, no fallbacks). You MUST change
+            this before flashing.
+
+    config PATCH_DAEMON_HOST
+        string "Patch daemon host"
+        default "patch.example.com"
+        help
+            Host to dial for the persistent control WSS and per-session
+            audio WSS. Matches the public server URL in v1 (single-host
+            topology per spec/02-daemon.md).
+
+    config PATCH_DAEMON_PORT
+        int "Patch daemon port"
+        default 443
+        range 1 65535
+
+    config PATCH_DAEMON_TLS
+        bool "Use wss (TLS) for daemon connection"
+        default y
+
+    menu "GPIO"
+
+        config PATCH_LED_GPIO
+            int "WS2812 LED ring data GPIO"
+            default 21
+            help
+                WS2812 ring data line for the HA Voice Preview Edition
+                (ESP32-S3-WROOM-1U with OCTAL PSRAM). GPIO21 is a free,
+                RMT-capable pad on this module. GPIO26-32 are the octal
+                SPI/PSRAM pads and are NOT usable as GPIO — the RMT driver
+                rejects them (boot loop), so do not move the ring there.
+
+        config PATCH_LED_RING_COUNT
+            int "WS2812 LEDs in ring"
+            default 12
+
+        config PATCH_LED_POWER_GPIO
+            int "WS2812 ring power-enable GPIO"
+            default 45
+            help
+                The HA Voice Preview Edition powers the LED ring through a
+                dedicated power rail (ESPHome `power_supply: led_power`, GPIO45)
+                that must be driven HIGH or the ring is unpowered and stays dark
+                regardless of a correct data line. -1 disables (ring is always
+                powered).
+
+        # --- Audio bus pins (HA Voice PE: TLV320AIC3204 codec) ---------------
+        # The real HA Voice Preview Edition does NOT wire raw INMP441/MAX98357A
+        # to the ESP32-S3. Audio goes through a TLV320AIC3204 codec (I2C
+        # control) with an XMOS DSP front-end. The ESP32 I2S is the CLOCK
+        # SECONDARY (codec is primary). There are two separate I2S buses with
+        # independent BCLK/WS pins. Values verified against the official
+        # ESPHome config (esphome/home-assistant-voice-pe @ dev,
+        # home-assistant-voice.yaml: i2s_input bclk GPIO13 / lrclk GPIO14 /
+        # din GPIO15; i2s_output bclk GPIO8 / lrclk GPIO7 / dout GPIO10).
+
+        config PATCH_MIC_BCLK_GPIO
+            int "Mic (codec ADC) I2S BCLK GPIO"
+            default 13
+        config PATCH_MIC_WS_GPIO
+            int "Mic (codec ADC) I2S WS/LRCLK GPIO"
+            default 14
+        config PATCH_MIC_DIN_GPIO
+            int "Mic (codec ADC) I2S DIN GPIO"
+            default 15
+
+        config PATCH_SPK_BCLK_GPIO
+            int "Speaker (codec DAC) I2S BCLK GPIO"
+            default 8
+        config PATCH_SPK_WS_GPIO
+            int "Speaker (codec DAC) I2S WS/LRCLK GPIO"
+            default 7
+        config PATCH_SPK_DOUT_GPIO
+            int "Speaker (codec DAC) I2S DOUT GPIO"
+            default 10
+
+        # --- Codec / amplifier control ---------------------------------------
+
+        config PATCH_CODEC_I2C_SDA_GPIO
+            int "AIC3204 codec I2C SDA GPIO"
+            default 5
+        config PATCH_CODEC_I2C_SCL_GPIO
+            int "AIC3204 codec I2C SCL GPIO"
+            default 6
+        config PATCH_CODEC_I2C_ADDR
+            hex "AIC3204 codec I2C 7-bit address"
+            default 0x18
+            help
+                TLV320AIC3204 default 7-bit I2C address is 0x18.
+
+        config PATCH_XMOS_RESET_GPIO
+            int "XMOS DSP / voice-kit reset GPIO"
+            default 4
+            help
+                The HA Voice PE routes the mics through an XMOS DSP that
+                supplies the I2S clocks (the ESP32 is I2S clock-secondary).
+                This reset line (ESPHome voice_kit reset_pin GPIO4) must be
+                released HIGH before the codec/I2S can clock. -1 disables.
+
+        config PATCH_SPK_AMP_EN_GPIO
+            int "Internal speaker amplifier enable GPIO"
+            default 47
+            help
+                HA Voice PE drives the internal speaker amplifier enable on
+                GPIO47 (ESPHome `internal_speaker_amp` gpio switch, driven HIGH
+                via switch.turn_on). The DAC output is silent until this is
+                HIGH. -1 disables (amp always on).
+
+        config PATCH_MUTE_SWITCH_GPIO
+            int "Hardware mute switch GPIO"
+            default 3
+            help
+                HA Voice Preview Edition hardware mute switch is on GPIO3
+                (verified against the official ESPHome config). NOTE: GPIO17 —
+                the previous default — is actually the audio-jack-plugged
+                sensor on this board, so reading it never reflects mute state.
+
+        config PATCH_BUTTON_GPIO
+            int "Action / push-to-talk button GPIO"
+            default 0
+            help
+                The HA Voice Preview Edition center action button is a plain
+                GPIO push button on GPIO0 (verified against the official
+                ESPHome config: `binary_sensor` platform gpio, pin number
+                GPIO0, inverted: true). It is active-LOW with an internal
+                pull-up: the pin reads 0 while held, 1 when released. This is
+                NOT a capacitive-touch pad — the earlier touch-channel approach
+                read the wrong source and never fired on a real press, so the
+                ring-accept / PTT path could not be exercised by a human.
+
+    endmenu
+
+endmenu

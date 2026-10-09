@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Patch — folder picker</title>
+<style>
+:root{--bg-app:#ebe7dc;--bg-panel:#f4f0e4;--bg-elevated:#fdfaf2;--ink:#1c1814;--ink-2:#4a4239;--ink-3:#857d72;--ink-faint:#b3aca0;--line:#d6cfba;--line-soft:#e3ddc8;--accent:#4f7a3e;--accent-soft:#cad9be;--accent-strong:#3a5e2c;--accent-tint:#e3ecdb;--radius-sm:6px;--radius:10px;--radius-lg:16px;--radius-pill:999px;--shadow-sm:0 1px 2px rgba(40,30,15,.06);--shadow-lg:0 14px 32px rgba(40,30,15,.10),0 2px 6px rgba(40,30,15,.06)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg-panel);color:var(--ink);font:14px/1.5 Inter,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+.stage{height:100vh;display:flex;flex-direction:column}
+.head{height:64px;display:grid;place-items:center;border-bottom:1px solid var(--line);font-family:Fraunces,Georgia,serif;font-size:21px}
+.body{flex:1;display:flex;flex-direction:column;align-items:center;padding-top:18vh}
+.row{display:flex;gap:8px;align-items:center;position:relative}
+.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:var(--radius-pill);padding:6px 14px;cursor:pointer;box-shadow:var(--shadow-sm)}
+.pill.open{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint)}
+.pill .name{font-weight:600}
+.pill .host{color:var(--ink-3)}
+.pill .car{color:var(--ink-3);font-size:10px}
+.pop{position:absolute;top:46px;left:-40px;width:460px;background:var(--bg-elevated);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden}
+.search{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
+.search svg{flex:none;color:var(--ink-3)}
+.search input{flex:1;border:0;outline:0;background:none;font-size:15px}
+.search input::placeholder{color:var(--ink-faint)}
+.hosts{display:flex;gap:4px;padding:10px 12px 4px}
+.hosts button{border:0;background:none;padding:3px 10px;border-radius:var(--radius-pill);font-size:12.5px;color:var(--ink-3);cursor:pointer}
+.hosts button.on{background:var(--accent-tint);color:var(--accent-strong);font-weight:500}
+.list{padding:4px 6px 6px;max-height:340px;overflow:auto}
+.item{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:var(--radius);cursor:pointer}
+.item.hl{background:var(--accent-tint)}
+.item .ic{width:28px;height:28px;border-radius:8px;background:var(--bg-panel);display:grid;place-items:center;flex:none;color:var(--ink-3)}
+.item.hl .ic{background:#fff;color:var(--accent)}
+.item .t{flex:1;min-width:0}
+.item .n{font-weight:500}
+.item .p{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .h{font-size:11.5px;color:var(--ink-3);background:var(--bg-panel);border-radius:var(--radius-pill);padding:1px 8px;flex:none}
+.item .m{color:var(--ink-faint);font-size:12px}
+.item .n b{background:#f7e7a8;font-weight:600;border-radius:2px}
+.foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line-soft);padding:9px 16px;font-size:12.5px;color:var(--ink-3)}
+.foot a{color:var(--accent-strong);text-decoration:none;font-weight:500;cursor:pointer}
+kbd{font:11px Inter,system-ui;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--ink-2);background:#fff}
+.composer{margin:0 auto 22px;width:780px;max-width:90%;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:11px 14px;color:var(--ink-faint)}
+.state{position:fixed;top:14px;right:16px;display:flex;gap:4px;background:#fff;border:1px solid var(--line);border-radius:var(--radius-pill);padding:3px}
+.state button{border:0;background:none;padding:4px 12px;border-radius:var(--radius-pill);cursor:pointer;color:var(--ink-2);font-size:12.5px}
+.state button.on{background:var(--accent);color:#fff}
+.path{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13.5px}
+.crumb{color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="state"><button class="on" data-s="recent">Open</button><button data-s="filter">Typing a name</button><button data-s="path">Typing a path</button><button data-s="closed">Closed</button></div>
+<div class="stage">
+  <div class="head">New chat</div>
+  <div class="body">
+    <div class="row">
+      <div class="pill open" id="pill"><span class="name">patch</span><span class="host">· Mac</span><span class="car">▾</span></div>
+      <div class="pill"><span class="name" style="font-weight:500">Opus 5.5</span><span class="car">▾</span></div>
+      <div class="pop" id="pop"></div>
+    </div>
+  </div>
+  <div class="composer">Message</div>
+</div>
+<script>
+const folder='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const mag='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+const recents=[
+ ['patch','~/projects/portfolio/projects/patch','Mac','now'],
+ ['portfolio','~/projects/portfolio','Hetzner','2h'],
+ ['Unite','~/wpp/Unite','Mac','yesterday'],
+ ['patch','/srv/patch','Hetzner','yesterday'],
+ ['cadence-marketplace','~/wpp/cadence-marketplace','Mac','3d'],
+ ['network-planner','~/projects/portfolio/projects/network-planner','Hetzner','5d'],
+];
+function item(r,i,hl,mark){
+  const n=mark?r[0].replace(new RegExp('('+mark+')','i'),'<b>$1</b>'):r[0];
+  return `<div class="item${i===hl?' hl':''}"><span class="ic">${folder}</span><span class="t"><div class="n">${n}</div><div class="p">${r[1]}</div></span><span class="h">${r[2]}</span><span class="m">${r[3]}</span></div>`;
+}
+const hosts=on=>`<div class="hosts">${['All','Mac','Hetzner'].map(h=>`<button class="${h===on?'on':''}">${h}</button>`).join('')}</div>`;
+const foot=`<div class="foot"><span><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>↵</kbd> choose</span><a>Browse…</a></div>`;
+const states={
+ recent:()=>`<div class="search">${mag}<input placeholder="Search folders or type a path" autofocus></div>${hosts('All')}<div class="list">${recents.map((r,i)=>item(r,i,0)).join('')}</div>${foot}`,
+ filter:()=>{const q='net';const m=recents.filter(r=>r[0].includes(q)||r[1].includes(q));return `<div class="search">${mag}<input value="net"></div>${hosts('All')}<div class="list">${m.map((r,i)=>item(r,i,0,q)).join('')}</div>${foot}`},
+ path:()=>`<div class="search">${mag}<input class="path" value="~/projects/portfolio/pro"></div>${hosts('Mac')}<div class="list">
+   ${[['projects','~/projects/portfolio/projects'],['prompts','~/projects/portfolio/prompts'],['proposals','~/projects/portfolio/proposals']].map((r,i)=>`<div class="item${i===0?' hl':''}"><span class="ic">${folder}</span><span class="t"><div class="n path"><span class="crumb">~/projects/portfolio/</span>${r[0].replace('pro','<b>pro</b>')}/</div></span>${i===0?'<kbd>tab</kbd>':''}</div>`).join('')}
+   </div><div class="foot"><span><kbd>tab</kbd> complete · <kbd>↵</kbd> choose</span><a>Browse…</a></div>`,
+};
+function show(s){
+  document.querySelectorAll('.state button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+  const pop=document.getElementById('pop'),pill=document.getElementById('pill');
+  if(s==='closed'){pop.style.display='none';pill.classList.remove('open');return}
+  pop.style.display='block';pill.classList.add('open');pop.innerHTML=states[s]();
+}
+document.querySelectorAll('.state button').forEach(b=>b.onclick=()=>show(b.dataset.s));
+show('recent');
+</script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · new chat (low-fi v02)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .stage {
+    width: 1280px;
+    height: 800px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 280px 6px 1fr;
+    grid-template-rows: 1fr;
+  }
+  .gutter {
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    cursor: col-resize;
+    position: relative;
+  }
+  .gutter::before {
+    content: '⋮';
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--muted); font-size: 12px; line-height: 1;
+  }
+
+  /* SIDEBAR */
+  .sidebar { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .brandbar { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .brandbar .brand { font-weight: 600; }
+  .sb-list { flex: 1; overflow: hidden; padding: 4px 0; }
+  .row { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; padding: 4px 12px; align-items: baseline; }
+  .row.special .body .name { font-weight: 600; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.idle { color: var(--muted); }
+  .row .status.special { color: var(--muted); }
+  .row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .when { font-size: 11px; color: var(--muted); }
+  .row.in-folder { padding-left: 24px; }
+  .folder-head { padding: 8px 12px 2px; color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+  .divider { border-top: 1px solid var(--line); margin: 4px 0; }
+  .arch-toggle { padding: 6px 12px; color: var(--muted); font-size: 12px; border-top: 1px dashed var(--line); }
+  .sb-bottom { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .sb-link { padding: 3px 0; }
+  .btn-block { margin-top: 4px; display: block; width: 100%; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); text-align: center; font-size: 12px; }
+  .btn-block.active { background: var(--accent); }
+
+  /* MAIN — new chat */
+  .main { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-head { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: baseline; }
+  .folder-pill {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 3px 8px;
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .folder-pill .caret { color: var(--muted); margin-left: 6px; }
+  .placeholder-name { color: var(--faded); font-style: italic; }
+  .main-head .right { margin-left: auto; display: flex; gap: 8px; }
+  .main-head .ctrl { font-size: 12px; border: 1px solid var(--line); padding: 2px 8px; background: var(--bg); }
+
+  .stream {
+    flex: 1;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--faded);
+    font-size: 13px;
+    font-style: italic;
+  }
+
+  .composer {
+    border-top: 1px solid var(--line);
+    padding: 12px 14px;
+    display: flex; gap: 8px; align-items: stretch;
+  }
+  .composer .input {
+    flex: 1;
+    border: 2px solid var(--ink);
+    padding: 10px;
+    min-height: 56px;
+    color: var(--muted);
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+  .composer .input::after {
+    content: '|';
+    color: var(--ink);
+    margin-left: 1px;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .composer .send {
+    border: 1px solid var(--line);
+    padding: 6px 14px;
+    background: var(--bg);
+    align-self: flex-end;
+    font-size: 12px;
+  }
+
+  .editor { grid-column: 5; grid-row: 1; background: var(--fill); padding: 14px; }
+  .editor .box { height: 100%; border: 1px dashed var(--line); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span></div>
+    <div class="sb-list">
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Manager</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Voice</div></div><span class="when"></span></div>
+      <div class="divider"></div>
+      <div class="folder-head">bed-planner</div>
+      <div class="row in-folder"><span class="status running">●</span><div class="body"><div class="name">fix layout bug</div></div><span class="when">2m</span></div>
+      <div class="folder-head">portfolio</div>
+      <div class="row in-folder"><span class="status waiting">!</span><div class="body"><div class="name">approve manifest write</div></div><span class="when">4m</span></div>
+      <div class="folder-head">health-tracker</div>
+      <div class="row in-folder"><span class="status idle">·</span><div class="body"><div class="name">weekly summary script</div></div><span class="when">38m</span></div>
+    </div>
+    <div class="arch-toggle">▸ archived (12)</div>
+    <div class="sb-bottom">
+      <span class="sb-link">Schedules</span>
+      <span class="sb-link">Settings</span>
+      <button class="btn-block active">[ + new chat ]</button>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <!-- MAIN: new chat -->
+  <div class="main">
+    <div class="main-head">
+      <span class="folder-pill">~/projects/bed-planner<span class="caret">▾</span></span>
+      <span class="placeholder-name">— unnamed</span>
+      <span class="right">
+        <span class="ctrl">[voice]</span>
+        <span class="ctrl">[files]</span>
+      </span>
+    </div>
+
+    <div class="stream">
+      &nbsp;
+    </div>
+
+    <div class="composer">
+      <div class="input">Type your first message…</div>
+      <span class="send">[ send ]</span>
+    </div>
+  </div>
+
+
+</div>
+
+</body>
+</html>

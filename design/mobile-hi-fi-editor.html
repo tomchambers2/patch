@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — mobile · editor (hi-fi v01)</title>
+<link rel="stylesheet" href="hi-fi-tokens.css">
+<style>
+  body { background: #d4d0c4; padding: 36px 0; }
+  .deck { display: grid; grid-template-columns: repeat(2, 412px); gap: 36px 32px; justify-content: center; padding-bottom: 60px; }
+  .frame-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .label { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); }
+  .label .num { background: var(--ink); color: var(--bg-app); padding: 2px 8px; margin-right: 8px; }
+  .label .desc { text-transform: none; letter-spacing: 0; font-family: 'Inter', sans-serif; color: var(--ink); font-size: 13px; }
+
+  .phone { width: 412px; height: 880px; background: var(--bg-panel); border: 1px solid var(--ink); border-radius: 36px; box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .status-bar { height: 36px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+
+  .nav-bar { padding: 8px 14px 12px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; border-bottom: 1px solid var(--line-soft); }
+  .nav-bar .back { font-size: 22px; color: var(--ink); width: 22px; }
+  .nav-bar .title { flex: 1; min-width: 0; overflow: hidden; }
+  .nav-bar .title .folder { color: var(--ink-3); font-size: 10.5px; font-family: 'JetBrains Mono', ui-monospace, monospace; line-height: 1.2; }
+  .nav-bar .title .name { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 1.3; font-weight: 500; }
+  .nav-bar .right { display: flex; gap: 8px; }
+  .nav-bar .save-btn { background: var(--accent); color: var(--bg-elevated); border: none; padding: 6px 14px; border-radius: var(--radius-sm); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; }
+
+  /* tree screen */
+  .tree-search {
+    margin: 10px 18px;
+    border: 1px solid var(--line);
+    background: var(--bg-elevated);
+    padding: 9px 12px;
+    font-size: 13px;
+    color: var(--ink-3);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    border-radius: var(--radius);
+  }
+  .tree-list { flex: 1; padding: 0 8px 12px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; overflow: hidden; }
+  .t-row { padding: 9px 12px; display: flex; align-items: center; gap: 10px; border-radius: var(--radius); margin: 1px 0; }
+  .t-row .caret { width: 12px; color: var(--ink-3); }
+  .t-row.folder .name { font-weight: 500; }
+  .t-row.dirty::after { content: ''; }
+  .t-row.dirty { background: var(--bg-soft); }
+  .t-row.dirty.depth-3 { background: var(--bg-soft); }
+  .t-row .stat { color: var(--ink-3); font-size: 11px; margin-left: auto; }
+  .t-row .stat .add { color: var(--accent); }
+  .t-row .stat .del { color: var(--voice); }
+  .t-row.depth-1 { padding-left: 14px; }
+  .t-row.depth-2 { padding-left: 32px; }
+  .t-row.depth-3 { padding-left: 50px; }
+
+  .foot {
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-panel);
+    padding: 8px 18px;
+    font-size: 11.5px;
+    color: var(--ink-3);
+    flex-shrink: 0;
+  }
+  .foot b { color: var(--ink); }
+
+  /* file diff screen */
+  .file-meta {
+    padding: 8px 18px;
+    background: var(--bg-panel);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; gap: 14px; align-items: center;
+  }
+  .file-meta b { color: var(--ink); }
+  .file-meta .right { margin-left: auto; display: flex; gap: 4px; }
+  .file-meta .toggle { font-size: 11px; border: 1px solid var(--line); padding: 3px 9px; background: var(--bg-elevated); border-radius: var(--radius-sm); color: var(--ink-3); font-weight: 500; }
+  .file-meta .toggle.active { background: var(--accent-tint); color: var(--accent-strong); border-color: var(--accent-soft); }
+
+  .body-text { flex: 1; padding: 10px 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; line-height: 1.6; overflow: hidden; white-space: pre; }
+  .body-text .line { display: block; padding: 0 14px 0 0; }
+  .body-text .ln { display: inline-block; width: 50px; color: var(--ink-faint); user-select: none; text-align: right; padding-right: 10px; }
+  .body-text .add { background: var(--diff-add); }
+  .body-text .del { background: var(--diff-del); }
+</style>
+</head>
+<body>
+<div class="deck">
+
+
+  <!-- M-E1 file tree -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">M-E1</span><span class="desc">Editor — file tree</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name" style="font-family: 'Fraunces', Georgia, serif; font-style: italic; font-size: 16px; font-variation-settings: 'opsz' 36, 'SOFT' 50;">files</div>
+        </div>
+      </div>
+      <div class="tree-search">⌘P  go to file…</div>
+      <div class="tree-list">
+        <div class="t-row folder depth-1"><span class="caret">▾</span><span class="name">src</span></div>
+        <div class="t-row folder depth-2"><span class="caret">▸</span><span class="name">components</span></div>
+        <div class="t-row dirty depth-2"><span class="caret"></span><span class="name">layout.ts</span><span class="stat"><span class="add">+3</span> <span class="del">−1</span></span></div>
+        <div class="t-row depth-2"><span class="caret"></span><span class="name">main.ts</span></div>
+        <div class="t-row folder depth-1"><span class="caret">▾</span><span class="name">test</span></div>
+        <div class="t-row dirty depth-2"><span class="caret"></span><span class="name">layout.test.ts</span><span class="stat"><span class="add">+12</span></span></div>
+        <div class="t-row depth-1"><span class="caret"></span><span class="name">package.json</span></div>
+        <div class="t-row depth-1"><span class="caret"></span><span class="name">README.md</span></div>
+        <div class="t-row depth-1"><span class="caret"></span><span class="name">tsconfig.json</span></div>
+      </div>
+      <div class="foot"><b>2</b> dirty files in this chat</div>
+    </div>
+  </div>
+
+
+  <!-- M-E2 file diff -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">M-E2</span><span class="desc">Editor — file in diff mode</span></div>
+    <div class="phone">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">files /</div>
+          <div class="name">src/layout.ts</div>
+        </div>
+        <span class="right">
+          <button class="save-btn">⌘S</button>
+        </span>
+      </div>
+      <div class="file-meta">
+        <span><b>+3 / −1</b> · 1 hunk</span>
+        <span class="right">
+          <span class="toggle active">diff</span>
+          <span class="toggle">new</span>
+          <span class="toggle">old</span>
+        </span>
+      </div>
+      <div class="body-text"><span class="line"><span class="ln">1   1</span>  export const layout = {</span><span class="line"><span class="ln">2   2</span>    rows: 2,</span><span class="line del"><span class="ln">3    </span>−   grid: '400px 1fr',</span><span class="line add"><span class="ln">    3</span>+   grid: 'minmax(280px, 1fr) 1fr',</span><span class="line"><span class="ln">4   4</span>  }</span><span class="line"><span class="ln">5   5</span></span><span class="line"><span class="ln">6   6</span>  // the old layout used a fixed</span><span class="line"><span class="ln">7   7</span>  // 400px right column, which broke</span><span class="line"><span class="ln">8   8</span>  // at narrow viewports.</span></div>
+      <div class="foot"><b>src/layout.ts</b> · TypeScript · 142 lines · UTF-8 · LF</div>
+    </div>
+  </div>
+
+
+</div>
+</body>
+</html>

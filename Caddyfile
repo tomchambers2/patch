@@ -1,0 +1,34 @@
+# Caddy config for the LOCAL TEST STACK ONLY (docker-compose.test.yml).
+#
+# Production is NOT configured here. patch.tomchambers.me is served by the
+# Hetzner host's own Caddy at /etc/caddy/Caddyfile, which sends /device/* to
+# :3003 and EVERYTHING ELSE (/audio/* included — the server relays it to the
+# chat's host) to patch-server on :3000. That file
+# lives on the box, outside this repo, and is the only routing that matters in
+# prod.
+#
+# This file previously also carried a `patch.tomchambers.me` block, reachable
+# only through deploy/docker-compose.yml + scripts/deploy.mjs — an orphaned
+# deploy path nothing invoked (`pnpm run deploy` runs scripts/ship.mjs). Because
+# it listed a NARROWER set of proxied paths than prod actually serves, reading it
+# as production routing produced a wrong diagnosis of the Google OAuth
+# redirect_uri_mismatch. It is gone, along with that dead path.
+
+# Plain HTTP on localhost, so no ACME account is needed.
+
+# Local-only HTTP frontend used by docker-compose.test.yml, whose service is
+# named `server`.
+:80 {
+	handle /api/* {
+		reverse_proxy server:3000
+	}
+	handle /ws* {
+		reverse_proxy server:3000
+	}
+	handle /app* {
+		reverse_proxy server:3000
+	}
+	handle / {
+		redir /app/ permanent
+	}
+}

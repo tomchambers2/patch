@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+  <shortcut android:shortcutId="manager_voice_note" android:enabled="true" android:shortcutShortLabel="@string/shortcut_manager_voice_note">
+    <intent android:action="android.intent.action.VIEW" android:data="patch://voice-note?chat=thread_manager" android:targetClass="io.github.tomchambers2.patch.MainActivity" android:targetPackage="io.github.tomchambers2.patch" />
+  </shortcut>
+  <shortcut android:shortcutId="new_chat" android:enabled="true" android:shortcutShortLabel="@string/shortcut_new_chat">
+    <intent android:action="android.intent.action.VIEW" android:data="patch://new-chat" android:targetClass="io.github.tomchambers2.patch.MainActivity" android:targetPackage="io.github.tomchambers2.patch" />
+  </shortcut>
+  <shortcut android:shortcutId="open_speakers" android:enabled="true" android:shortcutShortLabel="@string/shortcut_open_speakers">
+    <intent android:action="android.intent.action.VIEW" android:data="patch://chats/thread_speakers" android:targetClass="io.github.tomchambers2.patch.MainActivity" android:targetPackage="io.github.tomchambers2.patch" />
+  </shortcut>
+</shortcuts>

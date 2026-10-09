@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — mobile · editor (low-fi v01)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --diff-add: #e3f5e3;
+    --diff-del: #fbe3e3;
+    --diff-add-strong: #2a8f3e;
+    --diff-del-strong: #b73a3a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 32px 0;
+    background: #d4d4d4;
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  .deck {
+    display: grid;
+    grid-template-columns: repeat(2, 412px);
+    gap: 36px 28px;
+    justify-content: center;
+    padding-bottom: 60px;
+  }
+  .frame-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .label {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #444;
+    padding: 0 4px;
+  }
+  .label .num { background: var(--ink); color: var(--bg); padding: 2px 8px; margin-right: 8px; }
+  .label .desc { text-transform: none; letter-spacing: 0; font-family: -apple-system, system-ui, sans-serif; color: var(--ink); font-size: 13px; }
+
+  .phone-frame {
+    width: 412px;
+    height: 850px;
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    border-radius: 28px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .status-bar {
+    height: 32px;
+    padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  .nav-bar {
+    padding: 6px 12px 10px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .nav-bar .back { font-size: 22px; color: var(--ink); width: 22px; }
+  .nav-bar .title { flex: 1; min-width: 0; overflow: hidden; }
+  .nav-bar .title .folder { color: var(--muted); font-size: 10px; font-family: ui-monospace, monospace; line-height: 1.2; }
+  .nav-bar .title .name { font-weight: 600; font-size: 15px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; }
+  .nav-bar .right { display: flex; gap: 8px; }
+  .nav-bar .icon-btn {
+    width: 30px; height: 30px;
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    background: var(--bg);
+  }
+  .nav-bar .save {
+    background: var(--ink); color: var(--bg); border-color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* tree screen */
+  .tree-search {
+    margin: 8px 14px;
+    border: 1px solid var(--line);
+    background: var(--fill);
+    padding: 8px 12px;
+    font-size: 14px;
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
+  }
+  .tree-list {
+    flex: 1;
+    padding: 0 0 12px;
+    overflow: hidden;
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+  }
+  .t-row {
+    padding: 8px 14px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--fill);
+  }
+  .t-row .caret { width: 12px; color: var(--muted); }
+  .t-row.folder .name { font-weight: 500; }
+  .t-row.dirty::after { content: '●'; color: var(--diff-add-strong); margin-left: auto; font-size: 12px; }
+  .t-row .stat { color: var(--muted); font-size: 11px; margin-left: auto; }
+  .t-row .stat .add { color: var(--diff-add-strong); }
+  .t-row .stat .del { color: var(--diff-del-strong); }
+  .t-row.depth-1 { padding-left: 14px; }
+  .t-row.depth-2 { padding-left: 32px; }
+  .t-row.depth-3 { padding-left: 50px; }
+
+  /* file screen */
+  .file-meta {
+    padding: 6px 14px;
+    background: #ececec;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    display: flex; gap: 14px; align-items: center;
+  }
+  .file-meta b { color: var(--ink); }
+  .file-meta .right { margin-left: auto; display: flex; gap: 6px; }
+  .file-meta .toggle {
+    font-size: 11px;
+    border: 1px solid var(--line);
+    padding: 1px 8px;
+    background: var(--bg);
+  }
+  .file-meta .toggle.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .body-text {
+    flex: 1;
+    padding: 8px 0;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    overflow: hidden;
+    white-space: pre;
+  }
+  .body-text .line { display: block; padding: 0 14px 0 0; }
+  .body-text .ln {
+    display: inline-block;
+    width: 50px;
+    color: var(--faded);
+    user-select: none;
+    text-align: right;
+    padding-right: 10px;
+  }
+  .body-text .add { background: var(--diff-add); }
+  .body-text .del { background: var(--diff-del); }
+  .body-text .add .ln { color: var(--diff-add-strong); }
+  .body-text .del .ln { color: var(--diff-del-strong); }
+
+  .foot {
+    border-top: 1px solid var(--line);
+    background: var(--fill);
+    padding: 6px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+    display: flex; gap: 14px; align-items: center;
+  }
+  .foot b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- ── M-E1: TREE / file list ──────────── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">M-E1</span><span class="desc">Editor — file tree (entered via [files] in chat header)</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name">files</div>
+        </div>
+      </div>
+      <div class="tree-search">⌘ go to file…</div>
+      <div class="tree-list">
+        <div class="t-row folder depth-1"><span class="caret">▾</span><span class="name">src</span></div>
+        <div class="t-row folder depth-2"><span class="caret">▸</span><span class="name">components</span></div>
+        <div class="t-row dirty depth-2"><span class="caret"></span><span class="name">layout.ts</span><span class="stat"><span class="add">+3</span> <span class="del">−1</span></span></div>
+        <div class="t-row depth-2"><span class="caret"></span><span class="name">main.ts</span></div>
+        <div class="t-row folder depth-1"><span class="caret">▾</span><span class="name">test</span></div>
+        <div class="t-row dirty depth-2"><span class="caret"></span><span class="name">layout.test.ts</span><span class="stat"><span class="add">+12</span></span></div>
+        <div class="t-row depth-1"><span class="caret"></span><span class="name">package.json</span></div>
+        <div class="t-row depth-1"><span class="caret"></span><span class="name">README.md</span></div>
+        <div class="t-row depth-1"><span class="caret"></span><span class="name">tsconfig.json</span></div>
+      </div>
+      <div class="foot">
+        <span><b>2</b> files with changes in this chat</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── M-E2: FILE / diff mode ───────────── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">M-E2</span><span class="desc">Editor — file in diff mode (tap a dirty file or a tool-call to land here)</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">files /</div>
+          <div class="name">src/layout.ts</div>
+        </div>
+        <span class="right">
+          <span class="icon-btn save">⌘S</span>
+        </span>
+      </div>
+      <div class="file-meta">
+        <span><b>+3 / −1</b> · 1 hunk</span>
+        <span class="right">
+          <span class="toggle active">diff</span>
+          <span class="toggle">new</span>
+          <span class="toggle">old</span>
+        </span>
+      </div>
+      <div class="body-text"><span class="line"><span class="ln">1   1</span>  export const layout = {</span><span class="line"><span class="ln">2   2</span>    rows: 2,</span><span class="line del"><span class="ln">3    </span>−   grid: '400px 1fr',</span><span class="line add"><span class="ln">    3</span>+   grid: 'minmax(280px, 1fr) 1fr',</span><span class="line"><span class="ln">4   4</span>  }</span><span class="line"><span class="ln">5   5</span></span><span class="line"><span class="ln">6   6</span>  // the old layout used a fixed</span><span class="line"><span class="ln">7   7</span>  // 400px right column, which broke</span><span class="line"><span class="ln">8   8</span>  // at narrow viewports.</span></div>
+      <div class="foot">
+        <span><b>src/layout.ts</b> · TypeScript · 142 lines</span>
+        <span>UTF-8 · LF</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,218 @@
+# Builds Patch and publishes it as a GitHub Release.
+#
+# Two channels from one workflow:
+#   dev      every build of main, published as a prerelease tagged dev-<version>
+#   stable   a pushed tag vX.Y.Z, published as a normal release
+#
+# Clients pull from the release; nothing here depends on any one person's
+# machine being awake.
+#
+# STATE: manual only. The push and tag triggers are commented out on purpose
+# until the repo is public. Actions minutes are free for public repos only, and
+# the macOS runners this will need are billed at a multiple on a private one.
+# Switch the triggers on when the repo goes public.
+#
+# BUILT SO FAR: the server and web release (the part anyone self-hosting runs)
+# the Linux host artifacts (x64 and arm64), signed with the artifact key, and
+# the signed Android APK.
+# NOT YET: the macOS host and the signed, notarised desktop app (they need a
+# macOS runner, the signing certificate and Apple credentials as secrets). Each
+# becomes a job here that fails loudly if its inputs are missing.
+#
+# Secrets this workflow needs once it runs for real:
+#   PATCH_ARTIFACT_SIGNING_KEY       the ed25519 key hosts verify self-updates against
+#   PATCH_ANDROID_KEYSTORE_B64       the Android release keystore, base64
+#   PATCH_ANDROID_CREDENTIALS_JSON   its credentials.json (alias and passwords)
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: dev or stable
+        type: choice
+        options: [dev, stable]
+        default: dev
+  # push:
+  #   branches: [main]
+  #   tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the patch component of the version is the commit count
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - id: version
+        run: |
+          echo "version=$(node scripts/version.mjs)" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Gate
+        run: node scripts/personal-check.mjs && node --test scripts/*.test.mjs
+      - name: Build the server and web release
+        run: pnpm run build:server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server
+          if-no-files-found: error
+          path: |
+            dist/server/patch-server-*.tar.gz
+            dist/server/patch-server.tar.gz
+            dist/server/patch-server.tar.gz.sha256
+            dist/server/install.sh
+
+  host:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-x64, linux-arm64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Build the host's JavaScript
+        run: pnpm turbo build --filter=@patch/daemon... --output-logs=errors-only
+      - name: Fetch the pinned runtime, native addon and model
+        run: node scripts/fetch-vendor.mjs --out="$RUNNER_TEMP/vendor" --targets=${{ matrix.target }}
+      - name: Build and sign the host artifact
+        env:
+          SIGNING_KEY: ${{ secrets.PATCH_ARTIFACT_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "PATCH_ARTIFACT_SIGNING_KEY is not set: an unsigned host would be refused by every install" >&2
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$SIGNING_KEY" > "$RUNNER_TEMP/artifact-signing.key"
+          PATCH_BUILD_VENDOR="$RUNNER_TEMP/vendor" \
+          PATCH_ARTIFACT_SIGNING_KEY="$RUNNER_TEMP/artifact-signing.key" \
+          PATCH_BUILD_TARGETS=${{ matrix.target }} \
+          PATCH_BUILD_OUT="$RUNNER_TEMP/out" \
+          node scripts/build-daemon.mjs
+          rm -f "$RUNNER_TEMP/artifact-signing.key"
+          # One manifest per target; the release consumer merges them.
+          mv "$RUNNER_TEMP/out/daemon-latest.json" "$RUNNER_TEMP/out/daemon-latest-${{ matrix.target }}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: host-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/out/*.tar.gz
+            ${{ runner.temp }}/out/*.tar.gz.sig
+            ${{ runner.temp }}/out/daemon-latest-*.json
+
+  android:
+    runs-on: ubuntu-latest
+    outputs:
+      apk: ${{ steps.build.outputs.apk }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Android SDK pieces the build needs
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "ndk;26.1.10909125" "build-tools;35.0.0"
+      - name: Release signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.PATCH_ANDROID_KEYSTORE_B64 }}
+          CREDENTIALS_JSON: ${{ secrets.PATCH_ANDROID_CREDENTIALS_JSON }}
+        run: |
+          set -euo pipefail
+          # Every install is signed with this one key; a build signed with any
+          # other is refused by the phone, so a missing key stops here.
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$CREDENTIALS_JSON" ]; then
+            echo "PATCH_ANDROID_KEYSTORE_B64 and PATCH_ANDROID_CREDENTIALS_JSON must both be set" >&2
+            exit 1
+          fi
+          umask 077
+          mkdir -p "$HOME/.patch-mobile-credentials"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$HOME/.patch-mobile-credentials/patch-upload.keystore"
+          printf '%s' "$CREDENTIALS_JSON" > "$HOME/.patch-mobile-credentials/credentials.json"
+      - name: Build the release APK
+        id: build
+        run: |
+          set -euo pipefail
+          read -r VERSION SHA BUILT < <(node scripts/version.mjs --json | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.version,v.gitSha,v.builtAt)')
+          node scripts/build-apk-local.mjs --version "$VERSION" --sha "$SHA" --built-at "$BUILT" | tee "$RUNNER_TEMP/apk.log"
+          APK=$(sed -n 's/^##apk //p' "$RUNNER_TEMP/apk.log" | tail -1)
+          test -f "$APK"
+          # Refuse anything that is not this app: a wrong id would install beside it.
+          PKG=$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          if [ "$PKG" != "io.github.tomchambers2.patch" ]; then
+            echo "built package is '$PKG', expected io.github.tomchambers2.patch" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp "$APK" "$RUNNER_TEMP/apk/patch-$VERSION.apk"
+          printf '{"version":"%s","gitSha":"%s","builtAt":"%s","file":"patch-%s.apk"}\n' "$VERSION" "$SHA" "$BUILT" "$VERSION" > "$RUNNER_TEMP/apk/android-latest.json"
+          rm -rf "$HOME/.patch-mobile-credentials" apps/mobile/credentials
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/apk/*.apk
+            ${{ runner.temp }}/apk/android-latest.json
+
+  publish:
+    needs: [server, host, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.server.outputs.version }}
+          CHANNEL: ${{ inputs.channel || (startsWith(github.ref, 'refs/tags/v') && 'stable' || 'dev') }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$CHANNEL" = stable ]; then
+            tag="$REF_NAME"
+            case "$tag" in v[0-9]*) ;; *) echo "a stable release needs a vX.Y.Z tag, got '$tag'" >&2; exit 1 ;; esac
+            flags=(--generate-notes)
+          else
+            tag="dev-$VERSION"
+            flags=(--prerelease --notes "Development build $VERSION of ${GITHUB_SHA::8}. Not for general use.")
+          fi
+          gh release create "$tag" assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Patch $VERSION" "${flags[@]}"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

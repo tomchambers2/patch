@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · schedules (hi-fi v01)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..700,30..100&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hi-fi-tokens.css">
+<style>
+  :root {
+    --bg-app:        #ebe7dc;
+    --bg-panel:      #f4f0e4;
+    --bg-elevated:   #fdfaf2;
+    --bg-soft:       #efebde;
+
+    --ink:           #1c1814;
+    --ink-2:         #4a4239;
+    --ink-3:         #857d72;
+    --ink-faint:     #b3aca0;
+
+    --line:          #d6cfba;
+    --line-soft:     #e3ddc8;
+
+    --accent:        #4f7a3e;
+    --accent-soft:   #cad9be;
+    --accent-strong: #3a5e2c;
+    --accent-tint:   #e3ecdb;
+
+    --running:       #4f7a3e;
+    --waiting:       #b67a1a;
+    --voice:         #a64a3a;
+    --read:          #857d72;
+
+    --radius-sm:     6px;
+    --radius:        10px;
+    --radius-lg:     16px;
+    --radius-pill:   999px;
+
+    --shadow-sm:     0 1px 2px rgba(40,30,15,0.06);
+    --shadow:        0 6px 18px rgba(40,30,15,0.08), 0 1px 3px rgba(40,30,15,0.05);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-app);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  .display { font-family: 'Fraunces', Georgia, serif; }
+  .mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  .stage {
+    width: 1280px;
+    height: 800px;
+    margin: 28px auto;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: 280px 1fr 420px;
+    overflow: hidden;
+  }
+
+  /* sidebar — identical to home */
+  .sidebar { background: var(--bg-panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+  .brandbar { padding: 18px 22px 16px; display: flex; align-items: center; gap: 6px; }
+  .brand { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 500; font-style: italic; font-size: 26px; color: var(--ink); letter-spacing: -0.02em; line-height: 1; }
+  .brand-mark { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; display: inline-block; margin-left: 1px; margin-bottom: 2px; vertical-align: baseline; }
+  .conn-dot { margin-left: auto; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
+  .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+  .sb-list { flex: 1; overflow: hidden; }
+  .sb-section { padding: 4px 0; }
+  .sb-row { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; padding: 8px 14px; align-items: baseline; margin: 0 8px; border-radius: var(--radius); }
+  .sb-row:hover { background: var(--bg-soft); }
+  .sb-row.active { background: var(--accent-tint); }
+  .sb-row.special .name { font-weight: 600; }
+  .sb-row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; color: var(--ink-3); }
+  .sb-row .status.running { color: var(--running); }
+  .sb-row .status.waiting { color: var(--waiting); }
+  .sb-row .status.special { color: var(--accent); }
+  .sb-row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-row .name { font-size: 13.5px; font-weight: 500; }
+  .sb-row .preview { font-size: 12px; color: var(--ink-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-row .when { font-size: 11px; color: var(--ink-3); }
+  .sb-row.in-folder { padding-left: 28px; }
+
+  .folder-head { padding: 14px 22px 4px; color: var(--ink-3); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  .divider { height: 1px; background: var(--line-soft); margin: 10px 16px; }
+  .sb-bottom { padding: 12px 16px 18px; border-top: 1px solid var(--line-soft); }
+  .sb-link { display: flex; align-items: center; padding: 8px 12px; border-radius: var(--radius); color: var(--ink-2); font-size: 13px; }
+  .sb-link.active { background: var(--accent-tint); color: var(--accent-strong); font-weight: 500; }
+  .sb-link .icon { color: var(--ink-3); margin-right: 10px; font-size: 14px; line-height: 1; }
+  .sb-link.active .icon { color: var(--accent-strong); }
+  .new-chat-btn { margin-top: 10px; width: 100%; padding: 12px 16px; border: none; border-radius: var(--radius); background: var(--ink); color: var(--bg-panel); font-family: inherit; font-size: 13.5px; font-weight: 500; box-shadow: var(--shadow-sm); }
+
+  /* main: schedules list */
+  .main { display: flex; flex-direction: column; overflow: hidden; background: var(--bg-elevated); border-right: 1px solid var(--line); }
+  .main-head {
+    padding: 22px 28px 18px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  .main-head .title {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: "opsz" 144, "SOFT" 50, "wght" 500;
+    font-size: 26px;
+    letter-spacing: -0.012em;
+  }
+  .main-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .main-head input.search {
+    border: 1px solid var(--line);
+    padding: 7px 12px 7px 32px;
+    font-size: 13px;
+    width: 220px;
+    background: var(--bg-panel) url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23857d72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3ccircle cx='11' cy='11' r='7'/%3e%3cpath d='m21 21-4.3-4.3'/%3e%3c/svg%3e") no-repeat 10px center;
+    border-radius: var(--radius);
+    font-family: inherit;
+    color: var(--ink);
+  }
+  .new-btn {
+    background: var(--ink);
+    color: var(--bg-panel);
+    padding: 8px 16px;
+    border: none;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: default;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .schedules { flex: 1; overflow: hidden; padding: 6px 14px; }
+  .sched-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1.6fr 1.6fr 90px 50px;
+    gap: 18px;
+    padding: 14px 16px;
+    align-items: center;
+    border-radius: var(--radius);
+    margin: 4px 0;
+    background: var(--bg-elevated);
+  }
+  .sched-row:hover { background: var(--bg-soft); }
+  .sched-row.selected {
+    background: var(--accent-tint);
+    box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm);
+  }
+  .sched-row.disabled { opacity: 0.5; }
+
+  .sched-row .name { font-weight: 600; font-size: 14px; }
+  .sched-row .trig { font-size: 13.5px; color: var(--ink); }
+  .sched-row .trig .type { color: var(--ink-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px; font-weight: 600; }
+  .sched-row .action-cell { font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .sched-row .action-cell .verb { color: var(--ink-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px; font-family: 'Inter', sans-serif; font-weight: 600; }
+  .sched-row .last-fired { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+  .sched-row .toggle {
+    width: 30px; height: 16px; border-radius: 999px;
+    background: var(--accent); position: relative; cursor: default;
+    transition: background 0.15s ease;
+  }
+  .sched-row .toggle::after {
+    content: ''; position: absolute; top: 2px; right: 2px;
+    width: 12px; height: 12px; border-radius: 50%; background: var(--bg-elevated);
+  }
+  .sched-row .toggle.off { background: var(--ink-faint); }
+  .sched-row .toggle.off::after { right: auto; left: 2px; }
+
+  /* editor rail */
+  .editor { background: var(--bg-panel); display: flex; flex-direction: column; overflow: hidden; }
+  .editor-head { padding: 22px 24px 16px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 10px; }
+  .editor-head .title { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 36, "SOFT" 50, "wght" 500; font-size: 22px; letter-spacing: -0.01em; }
+  .editor-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .toggle-large {
+    width: 36px; height: 20px; border-radius: 999px;
+    background: var(--accent); position: relative;
+  }
+  .toggle-large::after {
+    content: ''; position: absolute; top: 2px; right: 2px;
+    width: 16px; height: 16px; border-radius: 50%; background: var(--bg-elevated);
+  }
+  .toggle-large + .toggle-label { font-size: 12px; color: var(--ink-3); margin-left: -2px; }
+  .editor-head .close-btn { font-size: 18px; color: var(--ink-3); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
+  .editor-head .close-btn:hover { background: var(--bg-soft); }
+
+  .editor-body { flex: 1; padding: 18px 24px; overflow: hidden; }
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .field input[type=text], .field textarea, .field select {
+    width: 100%;
+    border: 1px solid var(--line);
+    padding: 8px 12px;
+    background: var(--bg-elevated);
+    font-family: inherit;
+    font-size: 13.5px;
+    border-radius: var(--radius);
+    color: var(--ink);
+  }
+  .field textarea {
+    resize: none;
+    height: 70px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .field .help { font-size: 11.5px; color: var(--ink-3); margin-top: 6px; line-height: 1.5; }
+  .field .row-2 { display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
+  .field input.readonly { background: var(--bg-soft); color: var(--ink-3); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; }
+
+  .seg {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg-elevated);
+  }
+  .seg .seg-opt {
+    flex: 1; text-align: center; padding: 8px 10px;
+    font-size: 12.5px; font-weight: 500;
+    color: var(--ink-3); border-right: 1px solid var(--line);
+  }
+  .seg .seg-opt:last-child { border-right: none; }
+  .seg .seg-opt.active { background: var(--accent-tint); color: var(--accent-strong); }
+
+  .editor-foot {
+    border-top: 1px solid var(--line-soft);
+    padding: 14px 24px;
+    display: flex; gap: 10px; align-items: center;
+    background: var(--bg-panel);
+  }
+  .editor-foot .right { margin-left: auto; display: flex; gap: 8px; }
+  .btn-ghost { font-size: 13px; padding: 7px 14px; border: 1px solid var(--line); background: var(--bg-elevated); color: var(--ink-2); border-radius: var(--radius); font-family: inherit; font-weight: 500; }
+  .btn-primary { font-size: 13px; padding: 7px 16px; border: none; background: var(--accent); color: var(--bg-elevated); border-radius: var(--radius); font-family: inherit; font-weight: 600; }
+  .btn-primary:hover { background: var(--accent-strong); }
+  .btn-danger { font-size: 13px; padding: 7px 14px; border: 1px solid var(--voice); background: var(--bg-elevated); color: var(--voice); border-radius: var(--radius); font-family: inherit; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="brandbar">
+      <span class="brand">patch</span>
+      <span class="conn-dot"></span>
+    </div>
+    <div class="sb-list">
+
+      <div class="sb-section">
+        <div class="sb-row special"><div class="body"><div class="name">Manager</div></div><span class="row-tools"><span class="mic-btn" title="hold to speak"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-row pinned">
+          <span class="status"><span class="badge read">✓</span></span>
+          <div class="body">
+            <div class="name">Home Assistant</div>
+            <div class="preview">porch lights off · 14:08</div>
+          </div>
+          <span class="row-tools">
+            <span class="pin-marker" title="pinned"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+            <span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+          </span>
+        </div>
+      </div>
+      <div class="divider pinned-div"></div>
+
+      <div class="folder-head">bed-planner</div>
+      <div class="sb-section">
+        <div class="sb-row in-folder">
+          <span class="status"><span class="badge permission"></span></span>
+          <div class="body">
+            <div class="name">fix layout bug</div>
+            <div class="preview">edit src/layout.ts — needs your OK</div>
+          </div>
+          <span class="when">2m</span>
+          <span class="row-tools"><span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span>
+        </div>
+      </div>
+
+      <div class="folder-head">portfolio</div>
+      <div class="sb-section">
+        <div class="sb-row in-folder">
+          <span class="status"><span class="badge working"></span></span>
+          <div class="body">
+            <div class="name">deploy to vercel</div>
+            <div class="preview">running build…</div>
+          </div>
+          <span class="when">just now</span>
+          <span class="row-tools"><span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span>
+        </div>
+      </div>
+
+      <div class="channels open">
+        <div class="ch-toggle">
+          <svg class="ch-chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          Channels
+        </div>
+        <div class="ch-list">
+          <div class="ch-row"><span class="ch-name">Telegram</span></div>
+          <div class="ch-row">
+            <span class="ch-name">Speakers</span>
+            <span class="ch-meta"><svg viewBox="0 0 24 24" width="11" height="11"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>kitchen</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-toggle">
+        <svg class="arch-icon" viewBox="0 0 24 24"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+        Archived
+      </div>
+
+    </div>
+    <div class="sb-bottom">
+      <div class="sb-link active"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>Schedules</div>
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+      <button class="new-chat-btn">+ New chat</button>
+    </div>
+  </div>
+
+  <!-- MAIN: schedules list -->
+  <div class="main">
+    <div class="main-head">
+      <span class="title">Schedules</span>
+      <span class="right">
+        <input class="search" type="text" placeholder="search">
+        <button class="new-btn">+ New</button>
+      </span>
+    </div>
+
+    <div class="schedules">
+      <div class="sched-row">
+        <span class="name">bus-watch</span>
+        <span class="trig">weekdays at 8:57</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>bus-watch</span>
+        <span class="last-fired">today 08:57</span>
+        <span><span class="toggle"></span></span>
+      </div>
+      <div class="sched-row">
+        <span class="name">weekly newsletter</span>
+        <span class="trig">Sundays at 9am</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>weekly-newsletter</span>
+        <span class="last-fired">Sun 09:00</span>
+        <span><span class="toggle"></span></span>
+      </div>
+      <div class="sched-row">
+        <span class="name">todoist @claude tasks</span>
+        <span class="trig">Todoist task tagged @claude</span>
+        <span class="action-cell"><span class="verb">spawn · prompt</span>"work the task per …"</span>
+        <span class="last-fired">3h ago</span>
+        <span><span class="toggle"></span></span>
+      </div>
+      <div class="sched-row">
+        <span class="name">standup prep</span>
+        <span class="trig">30 min before "standup" calendar events</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>standup-prep</span>
+        <span class="last-fired">yesterday</span>
+        <span><span class="toggle"></span></span>
+      </div>
+      <div class="sched-row selected">
+        <span class="name">github merge alerts</span>
+        <span class="trig">GitHub webhook /gh-83df…</span>
+        <span class="action-cell"><span class="verb">message · prompt</span>Manager</span>
+        <span class="last-fired">12m ago</span>
+        <span><span class="toggle"></span></span>
+      </div>
+      <div class="sched-row">
+        <span class="name">bin day reminder</span>
+        <span class="trig">Mondays at 7pm</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>bins-reminder</span>
+        <span class="last-fired">Mon 19:00</span>
+        <span><span class="toggle"></span></span>
+      </div>
+      <div class="sched-row disabled">
+        <span class="name">old health digest</span>
+        <span class="trig">every day at 8am</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>health-digest</span>
+        <span class="last-fired">2 weeks ago</span>
+        <span><span class="toggle off"></span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDITOR RAIL -->
+  <div class="editor">
+    <div class="editor-head">
+      <span class="title">github merge alerts</span>
+      <span class="right">
+        <span class="toggle-large"></span>
+        <span class="toggle-label">enabled</span>
+        <span class="close-btn">×</span>
+      </span>
+    </div>
+
+    <div class="editor-body">
+
+      <div class="field">
+        <label>name</label>
+        <input type="text" value="github merge alerts">
+      </div>
+
+      <div class="field">
+        <label>trigger</label>
+        <div class="row-2">
+          <select><option>webhook ▾</option></select>
+          <input class="readonly" type="text" value="https://patch.tom.example/webhook/gh-83df1c2a" readonly>
+        </div>
+        <div class="help">unguessable URL. paste into your GitHub repo's Webhooks settings.</div>
+      </div>
+
+      <div class="field">
+        <label>signature</label>
+        <div class="row-2">
+          <select><option>github ▾</option></select>
+          <input type="text" value="••••••••••••••••" style="font-family: 'JetBrains Mono', ui-monospace, monospace;">
+        </div>
+        <div class="help">scheme: github (X-Hub-Signature-256). server verifies; drops on mismatch.</div>
+      </div>
+
+      <div class="field">
+        <label>filter (jsonata)</label>
+        <textarea>payload.action = 'closed' and payload.pull_request.merged = true and payload.pull_request.base.ref = 'main'</textarea>
+      </div>
+
+      <div class="field">
+        <label>action — where</label>
+        <div class="seg">
+          <div class="seg-opt">spawn new chat</div>
+          <div class="seg-opt active">message existing chat</div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top: -6px;">
+        <select><option>Manager (special thread) ▾</option></select>
+      </div>
+
+      <div class="field">
+        <label>action — what</label>
+        <div class="seg">
+          <div class="seg-opt">run a skill</div>
+          <div class="seg-opt active">run a prompt</div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top: -6px;">
+        <textarea style="height: 56px;">PR merged: {{payload.pull_request.title}} by {{payload.pull_request.user.login}}</textarea>
+      </div>
+
+    </div>
+
+    <div class="editor-foot">
+      <button class="btn-danger">Delete</button>
+      <span class="right">
+        <button class="btn-ghost">Cancel</button>
+        <button class="btn-primary">Save</button>
+      </span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

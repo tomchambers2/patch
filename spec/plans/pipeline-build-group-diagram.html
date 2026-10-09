@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>pipeline-build-group — run flow</title>
+<style>
+  :root{
+    --ink:#0f172a; --sub:#475569; --line:#cbd5e1;
+    --build:#6366f1; --build-bg:#eef2ff;
+    --test:#0d9488; --test-bg:#ecfdf5;
+    --plan:#b45309; --plan-bg:#fffbeb;
+    --gate:#e11d48; --gate-bg:#fff1f2;
+    --ok:#16a34a; --pend:#f59e0b; --bad:#e11d48;
+    --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:44px 40px 56px; background:
+      radial-gradient(1200px 600px at 15% -10%, #eef2ff 0%, transparent 60%),
+      radial-gradient(1100px 700px at 110% 20%, #ecfdf5 0%, transparent 55%),
+      #f8fafc;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  h1{font-size:30px; margin:0 0 4px; letter-spacing:-0.02em}
+  h1 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:#1e293b;color:#fff;padding:2px 10px;border-radius:8px;font-size:22px}
+  .sub{color:var(--sub); font-size:15px; margin:0 0 30px; max-width:980px; line-height:1.5}
+  .grid{display:grid; grid-template-columns:300px 1fr 320px; gap:34px; align-items:start}
+
+  /* generic card */
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 18px;
+        box-shadow:0 1px 2px rgba(15,23,42,.04), 0 10px 30px -18px rgba(15,23,42,.35)}
+  .eyebrow{font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--sub); margin:0 0 10px}
+
+  /* PLAN rail */
+  .plan{position:sticky; top:24px; border-color:#fcd9a3; background:linear-gradient(180deg,var(--plan-bg),#fff)}
+  .plan .eyebrow{color:var(--plan)}
+  .plan h3{margin:2px 0 4px; font-size:16px}
+  .plan p{margin:0 0 14px; font-size:12.5px; color:var(--sub); line-height:1.5}
+  .test-row{display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #eee; border-radius:10px; margin-bottom:7px; font-size:12.5px; background:#fff}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .dot.ok{background:var(--ok)} .dot.pend{background:var(--pend)} .dot.bad{background:var(--bad)}
+  .tid{font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#64748b}
+  .pill{margin-left:auto;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px}
+  .pill.ok{background:#dcfce7;color:#166534}.pill.pend{background:#fef3c7;color:#92400e}.pill.bad{background:#ffe4e6;color:#9f1239}
+  .rw{margin-top:12px;font-size:11.5px;color:var(--plan);font-weight:600;display:flex;gap:8px;align-items:center}
+
+  /* center pipeline */
+  .pipe{display:flex; flex-direction:column; gap:0}
+  .stage{position:relative}
+  .stage .card{border-left:5px solid var(--bar,#94a3b8)}
+  .stage.build .card{--bar:var(--build); background:linear-gradient(180deg,var(--build-bg),#fff)}
+  .stage.test  .card{--bar:var(--test);  background:linear-gradient(180deg,var(--test-bg),#fff)}
+  .stage.infra .card{--bar:#0ea5e9}
+  .stage.plan2 .card{--bar:var(--plan); background:linear-gradient(180deg,var(--plan-bg),#fff)}
+  .stage h3{margin:0 0 6px; font-size:16.5px; display:flex; align-items:center; gap:9px}
+  .stage h3 .n{width:22px;height:22px;border-radius:7px;background:#0f172a;color:#fff;font-size:12px;display:grid;place-items:center;font-weight:700}
+  .stage p{margin:0; font-size:13px; color:#334155; line-height:1.55}
+  .stage p b{color:var(--ink)}
+  .arrow{height:30px; display:grid; place-items:center}
+  .arrow svg{display:block}
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:2px 8px;border-radius:999px;margin:0 4px 0 0}
+  .tag.gate{background:var(--gate-bg);color:var(--gate);border:1px solid #fecdd3}
+  .tag.dumb{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+  .tag.share{background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd}
+  .surfaces{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .surf{font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:4px 9px;color:#334155}
+  .surf b{color:var(--test)}
+
+  /* fix loop badge */
+  .loop{position:absolute; right:-16px; top:54px; bottom:64px; width:40px}
+  .loop svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .looplbl{position:absolute; right:-128px; top:50%; transform:translateY(-50%) rotate(0deg);
+           font-size:10.5px;font-weight:700;color:var(--test);width:120px;text-align:left;line-height:1.3}
+
+  /* right notes */
+  .notes{position:sticky; top:24px; display:flex; flex-direction:column; gap:14px}
+  .note{border-color:#e2e8f0}
+  .note .eyebrow{color:#334155}
+  .note b{display:block;font-size:13.5px;margin-bottom:3px}
+  .note span{font-size:12.5px;color:var(--sub);line-height:1.5}
+  .legend{display:flex;gap:16px;margin-top:26px;flex-wrap:wrap;font-size:12px;color:var(--sub)}
+  .legend i{font-style:normal;display:inline-flex;align-items:center;gap:7px}
+  .sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+</style>
+</head>
+<body>
+  <h1><span class="mono">pipeline-build-group</span> &nbsp;how one group runs</h1>
+  <p class="sub">One run builds a group and verifies it against its <b>plan-encoded e2e tests</b> on a <b>single shared live stack</b>.
+     Passing tests are skipped; only pending/failed ones execute; fix-loops touch only failures; every result is written back to the plan, which is the durable ledger. The orchestrator is pure mechanism — it never authors or narrows what gets tested.</p>
+
+  <div class="grid">
+
+    <!-- LEFT: the plan ledger -->
+    <aside class="card plan">
+      <p class="eyebrow">The plan · durable ledger</p>
+      <h3>tests live here, with status</h3>
+      <p>Authored once at plan-time (separate from builder &amp; orchestrator), frozen, read-only during a build.</p>
+      <div class="test-row"><span class="dot ok"></span><span class="tid">D-1</span> cron fires → chat <span class="pill ok">pass</span></div>
+      <div class="test-row"><span class="dot ok"></span><span class="tid">D-2</span> webhook HMAC <span class="pill ok">pass</span></div>
+      <div class="test-row"><span class="dot bad"></span><span class="tid">D-5</span> todoist secret <span class="pill bad">fail</span></div>
+      <div class="test-row"><span class="dot pend"></span><span class="tid">D-7</span> calendar E2E <span class="pill pend">pending</span></div>
+      <div class="rw">▲ read &amp; filter (skip <b>pass</b>)&nbsp; · &nbsp;▼ write results back</div>
+    </aside>
+
+    <!-- CENTER: the pipeline -->
+    <main class="pipe">
+
+      <section class="stage plan2">
+        <div class="card">
+          <h3><span class="n">1</span> Load tests</h3>
+          <p>Read-only agent reads the plan, returns the group's encoded tests <b>verbatim</b>. The workflow <b>filters out everything already <code>pass</code></b> — only <code>pending</code>/<code>fail</code> survive. <span class="tag share">no scope written by the orchestrator</span></p>
+        </div>
+      </section>
+      <div class="arrow"><svg width="20" height="30"><path d="M10 0 V22 M3 15 L10 24 L17 15" stroke="#94a3b8" stroke-width="2" fill="none"/></svg></div>
+
+      <section class="stage build">
+        <div class="card">
+          <h3><span class="n">2</span> Build &nbsp;→&nbsp; Confirm</h3>
+          <p>Builder <b>self-certifies</b> (vitest / mocks allowed — we don't trust builders to run the app). A <span class="tag dumb">dumb gate</span> sees only the table + a code all-pass check. <b>This is not the real gate</b> — the encoded tests are.</p>
+        </div>
+      </section>
+      <div class="arrow"><svg width="20" height="30"><path d="M10 0 V22 M3 15 L10 24 L17 15" stroke="#94a3b8" stroke-width="2" fill="none"/></svg></div>
+
+      <section class="stage infra">
+        <div class="card">
+          <h3><span class="n">3</span> Provision shared stack</h3>
+          <p>Bring up <b>one</b> live app stack (e.g. <code>docker compose -f docker-compose.test.yml up -d</code>), wait for healthz, hand its <b>URL to every executor</b>. <span class="tag share">one stack, not one-per-agent</span></p>
+        </div>
+      </section>
+      <div class="arrow"><svg width="20" height="30"><path d="M10 0 V22 M3 15 L10 24 L17 15" stroke="#94a3b8" stroke-width="2" fill="none"/></svg></div>
+
+      <section class="stage test">
+        <div class="loop">
+          <svg><path d="M20 56 C 44 56, 44 220, 20 220" stroke="#0d9488" stroke-width="2" fill="none" stroke-dasharray="5 4"/>
+               <path d="M14 214 L20 222 L26 214" stroke="#0d9488" stroke-width="2" fill="none"/></svg>
+          <div class="looplbl">fix loop ×2<br>re-runs <u>only</u><br>failing ids</div>
+        </div>
+        <div class="card">
+          <h3><span class="n">4</span> Test &nbsp;→&nbsp; Confirm</h3>
+          <p><b>Execute</b> (not enumerate) only the pending tests against the live stack, routed by surface. On fail: fix agent repairs the failing ids, then <b>only those re-run</b>. A <span class="tag dumb">dumb gate</span> fed <b>only</b> the rendered results decides pass/fail.</p>
+          <div class="surfaces">
+            <span class="surf"><b>backend</b> → curl</span>
+            <span class="surf"><b>frontend</b> → playwright</span>
+            <span class="surf"><b>cli</b> → patch CLI</span>
+          </div>
+        </div>
+      </section>
+      <div class="arrow"><svg width="20" height="30"><path d="M10 0 V22 M3 15 L10 24 L17 15" stroke="#94a3b8" stroke-width="2" fill="none"/></svg></div>
+
+      <section class="stage test">
+        <div class="card">
+          <h3><span class="n">5</span> Discover &nbsp;<span style="font-size:11px;color:#0d9488;font-weight:700">· once, open-ended</span></h3>
+          <p>One <b>general-reviewer</b> uses the app like a naive user to catch what the checklist missed. Output is <b>proposed tests</b> back to the plan — <b>it does not gate</b>.</p>
+        </div>
+      </section>
+      <div class="arrow"><svg width="20" height="30"><path d="M10 0 V22 M3 15 L10 24 L17 15" stroke="#94a3b8" stroke-width="2" fill="none"/></svg></div>
+
+      <section class="stage plan2">
+        <div class="card">
+          <h3><span class="n">6</span> Persist &nbsp;→&nbsp; Teardown</h3>
+          <p>Mechanical writer sets each test's <code>status</code> by id in the plan, marks the group complete <b>iff all pass</b>, then tears the stack down. <b>Plan writes are keyed to the gate — never to orchestrator judgement.</b></p>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- RIGHT: integrity principles -->
+    <aside class="notes">
+      <div class="card note"><p class="eyebrow">Why it can't weasel</p>
+        <b>Tests are frozen upstream</b><span>Authored at plan-time by a party with no stake in passing. The orchestrator only <i>reads</i> them — it can't narrow scope or soften a verdict.</span></div>
+      <div class="card note">
+        <b>The gate is dumb on purpose</b><span>Confirmation sees only <code>id · STATUS · evidence</code>. A hedge in the evidence ("mocked", "couldn't exercise") is visible; "deferred" can't be expressed — status is a hard <code>pass|fail</code> enum.</span></div>
+      <div class="card note">
+        <b>Real app, not unit tests</b><span>Executors drive the live shared stack (curl / playwright / CLI). A behaviour you can't exercise is a <i>fail</i>, never a pass.</span></div>
+      <div class="card note">
+        <b>The plan is the ledger</b><span>Per-test status persists, so re-runs &amp; interrupts skip what's green — efficiency and crash-resilience from the same move.</span></div>
+    </aside>
+  </div>
+
+  <div class="legend">
+    <i><span class="sw" style="background:var(--build)"></span> build (self-certified)</i>
+    <i><span class="sw" style="background:var(--test)"></span> test (real-app, the real gate)</i>
+    <i><span class="sw" style="background:#0ea5e9"></span> shared infra</i>
+    <i><span class="sw" style="background:var(--plan)"></span> plan ledger</i>
+    <i><span class="dot ok" style="width:14px;height:14px"></span> pass &nbsp;<span class="dot pend" style="width:14px;height:14px"></span> pending &nbsp;<span class="dot bad" style="width:14px;height:14px"></span> fail</i>
+  </div>
+</body>
+</html>

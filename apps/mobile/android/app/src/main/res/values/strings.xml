@@ -1,0 +1,9 @@
+<resources>
+  <string name="app_name">Patch</string>
+  <string name="shortcut_manager_voice_note" translatable="false">Manager voice note</string>
+  <string name="shortcut_new_chat" translatable="false">New chat</string>
+  <string name="shortcut_open_speakers" translatable="false">Open Speakers</string>
+  <string name="expo_runtime_version">0.1.3</string>
+  <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
+  <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
+</resources>

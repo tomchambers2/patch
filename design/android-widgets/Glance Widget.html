@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — Glance widget</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .home-screen { align-items: center; justify-content: center; }
+  .stage { display: flex; flex-direction: column; align-items: center; }
+  .glance {
+    width: 42vw;
+    max-width: 220px;
+    aspect-ratio: 1 / 1;
+    padding: 18px;
+    display: flex; flex-direction: column;
+  }
+  .glance .count {
+    margin-top: auto;
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: 52px;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .glance .count-label { font-size: 14px; color: var(--ink-3); margin-top: 2px; }
+  .glance .since { font-size: 11px; color: var(--ink-faint); margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<div class="home-screen">
+  <div class="stage">
+    <div class="widget-card glance">
+      <div class="widget-brand"><span class="name">patch</span><span class="dot"></span></div>
+      <div class="count">2</div>
+      <div class="count-label">need you</div>
+      <div class="since">updated 1m ago</div>
+    </div>
+    <div class="caption">Glance · 2×2 · counts permission-asks waiting on you.<br>Tap opens straight to the oldest one.</div>
+  </div>
+</div>
+
+</body>
+</html>

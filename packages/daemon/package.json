@@ -1,0 +1,58 @@
+{
+  "name": "@patch/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Patch daemon — Claude Code session lifecycle, chat_state, schedules.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "patch-tools-server": "./dist/bin/patch-tools-server.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@patch/auth": "workspace:*",
+    "@patch/wire": "workspace:*",
+    "docx": "^9.8.1",
+    "fastify": "^5.1.0",
+    "image-size": "^2.0.4",
+    "jszip": "^3.10.2",
+    "mammoth": "^1.13.0",
+    "onnxruntime-node": "^1.26.0",
+    "pino": "^9.5.0",
+    "playwright": "^1.61.1",
+    "qrcode-terminal": "^0.12.0",
+    "rehype-stringify": "^10.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
+    "ulid": "^2.3.0",
+    "unified": "^11.0.5",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.126"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/qrcode-terminal": "^0.12.2",
+    "@types/turndown": "^5.0.6",
+    "@types/ws": "^8.5.13",
+    "pdf-parse": "^2.4.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.9"
+  }
+}

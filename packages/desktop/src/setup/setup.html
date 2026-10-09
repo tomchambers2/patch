@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <title>Patch</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ink: #1b1f1d;
+        --paper: #fbfaf7;
+        --line: #d9d6cc;
+        --accent: #2f6b4f;
+        --red: #b3382c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #ecebe6;
+          --paper: #1b1d1c;
+          --line: #3a3d3b;
+          --accent: #6fbf94;
+          --red: #ef7b6e;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: var(--paper);
+        color: var(--ink);
+        font: 15px/1.4 -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+        -webkit-app-region: drag;
+      }
+      main {
+        width: min(420px, 90vw);
+        display: grid;
+        gap: 16px;
+        -webkit-app-region: no-drag;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font: 600 28px/1.1 'Fraunces', Georgia, serif;
+      }
+      button,
+      textarea {
+        font: inherit;
+        color: inherit;
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+      }
+      button {
+        text-align: left;
+        cursor: pointer;
+        min-height: 48px;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--paper);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button:focus-visible,
+      textarea:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 96px;
+        resize: vertical;
+        font-family: ui-monospace, 'JetBrains Mono', monospace;
+        font-size: 13px;
+      }
+      form {
+        display: grid;
+        gap: 12px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      #status {
+        margin: 0;
+        min-height: 1.4em;
+      }
+      #error {
+        margin: 0;
+        color: var(--red);
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Patch</h1>
+      <div id="choose" class="choices">
+        <div style="display: grid; gap: 12px">
+          <button type="button" id="local" data-testid="choose-local">On this Mac</button>
+          <button type="button" id="remote" data-testid="choose-remote">On my server</button>
+        </div>
+      </div>
+      <form id="join" hidden data-testid="join-form">
+        <label for="code">Pairing code</label>
+        <textarea
+          id="code"
+          data-testid="pairing-code"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="patch-pair://…"
+        ></textarea>
+        <div class="row">
+          <button type="submit" class="primary" id="connect" data-testid="connect">Connect</button>
+          <button type="button" id="back" data-testid="back">Back</button>
+        </div>
+      </form>
+      <p id="status" role="status" data-testid="status"></p>
+      <p id="error" role="alert" data-testid="error" hidden></p>
+    </main>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const choose = $('choose');
+      const join = $('join');
+      const status = $('status');
+      const error = $('error');
+      const buttons = () => [...document.querySelectorAll('button, textarea')];
+
+      function busy(on) {
+        for (const el of buttons()) el.disabled = on;
+      }
+      function say(message) {
+        status.textContent = message;
+      }
+      function fail(message) {
+        busy(false);
+        say('');
+        error.hidden = false;
+        error.textContent = message;
+      }
+      function pick(choice) {
+        error.hidden = true;
+        busy(true);
+        window.patchSetup.choose(choice);
+      }
+
+      $('local').addEventListener('click', () => pick({ kind: 'local' }));
+      $('remote').addEventListener('click', () => {
+        error.hidden = true;
+        choose.hidden = true;
+        join.hidden = false;
+        $('code').focus();
+      });
+      $('back').addEventListener('click', () => {
+        error.hidden = true;
+        join.hidden = true;
+        choose.hidden = false;
+      });
+      join.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = $('code').value.trim();
+        if (input === '') return fail('Paste the pairing code your server printed.');
+        pick({ kind: 'remote', input });
+      });
+
+      window.patchSetup.onProgress(say);
+      window.patchSetup.onFail(fail);
+    </script>
+  </body>
+</html>

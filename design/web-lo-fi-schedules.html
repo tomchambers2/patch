@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · schedules (low-fi v02)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --pane-head: #ececec;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .stage {
+    width: 1280px;
+    height: 800px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 280px 6px 1fr 6px 420px;
+    grid-template-rows: 1fr;
+  }
+  .gutter {
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    cursor: col-resize;
+    position: relative;
+  }
+  .gutter::before {
+    content: '⋮';
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--muted); font-size: 12px; line-height: 1;
+  }
+
+  /* SIDEBAR */
+  .sidebar { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .brandbar { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .brandbar .brand { font-weight: 600; }
+  .sb-list { flex: 1; overflow: hidden; padding: 4px 0; }
+  .row { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; padding: 4px 12px; align-items: baseline; }
+  .row.special .body .name { font-weight: 600; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.idle { color: var(--muted); }
+  .row .status.special { color: var(--muted); }
+  .row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .when { font-size: 11px; color: var(--muted); }
+  .row.in-folder { padding-left: 24px; }
+  .folder-head { padding: 8px 12px 2px; color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+  .divider { border-top: 1px solid var(--line); margin: 4px 0; }
+  .arch-toggle { padding: 6px 12px; color: var(--muted); font-size: 12px; border-top: 1px dashed var(--line); }
+  .sb-bottom { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .sb-link { padding: 3px 0; }
+  .sb-link.active { background: var(--accent); padding: 3px 6px; margin: 0 -6px; }
+  .btn-block { margin-top: 4px; display: block; width: 100%; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); text-align: center; font-size: 12px; }
+
+  /* MAIN: schedules list */
+  .main { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-head { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
+  .main-head .title { font-weight: 600; font-size: 16px; }
+  .main-head .right { margin-left: auto; display: flex; gap: 8px; }
+  .main-head input.search {
+    border: 1px solid var(--line);
+    padding: 4px 10px;
+    font-size: 12px;
+    width: 200px;
+  }
+  .main-head .ctrl { font-size: 12px; border: 1px solid var(--line); padding: 4px 10px; background: var(--bg); }
+  .main-head .ctrl.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  .schedules { flex: 1; overflow: hidden; }
+  .sched-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1.6fr 1.4fr auto auto;
+    gap: 16px;
+    padding: 11px 14px;
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .sched-row.head { background: var(--fill); padding: 6px 14px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .sched-row.selected { background: var(--accent); }
+  .sched-row.disabled .name, .sched-row.disabled .trig, .sched-row.disabled .action-cell, .sched-row.disabled .last-fired { color: var(--faded); }
+  .sched-row .name { font-weight: 500; }
+  .sched-row .trig { font-size: 13px; }
+  .sched-row .action-cell { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sched-row .action-cell .verb { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px; }
+  .sched-row .last-fired { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .sched-row .toggle {
+    width: 26px; height: 14px; border-radius: 7px; background: var(--running); position: relative; cursor: pointer;
+  }
+  .sched-row .toggle::after {
+    content: ''; position: absolute; top: 2px; right: 2px;
+    width: 10px; height: 10px; border-radius: 50%; background: var(--bg);
+  }
+  .sched-row .toggle.off { background: var(--faded); }
+  .sched-row .toggle.off::after { right: auto; left: 2px; }
+
+  /* RIGHT RAIL: editor */
+  .editor { grid-column: 5; grid-row: 1; background: var(--fill); display: flex; flex-direction: column; overflow: hidden; }
+  .editor-head { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  .editor-head .title { font-weight: 600; }
+  .editor-head .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .editor-head .ctrl { font-size: 11px; border: 1px solid var(--line); padding: 1px 8px; background: var(--bg); }
+  .editor-head .toggle {
+    width: 26px; height: 14px; border-radius: 7px; background: var(--running); position: relative;
+  }
+  .editor-head .toggle::after {
+    content: ''; position: absolute; top: 2px; right: 2px;
+    width: 10px; height: 10px; border-radius: 50%; background: var(--bg);
+  }
+  .editor-head .toggle-label { font-size: 11px; color: var(--muted); }
+
+  .editor-body { flex: 1; padding: 12px 14px; overflow: hidden; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+  .field input[type=text], .field textarea, .field select {
+    width: 100%;
+    border: 1px solid var(--line);
+    padding: 5px 8px;
+    background: var(--bg);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 13px;
+  }
+  .field textarea { resize: none; height: 56px; font-family: ui-monospace, monospace; font-size: 12px; }
+  .field .help { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .field .row-2 { display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
+  .field .folder-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
+  .field .folder-row .ctrl { font-size: 11px; border: 1px solid var(--line); padding: 3px 8px; background: var(--bg); }
+  .field .default-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .action-tabs { display: flex; border: 1px solid var(--line); margin-bottom: 8px; background: var(--bg); }
+  .action-tabs .t { flex: 1; text-align: center; padding: 5px 8px; font-size: 12px; cursor: default; color: var(--muted); border-right: 1px solid var(--line); }
+  .action-tabs .t:last-child { border-right: none; }
+  .action-tabs .t.active { color: var(--ink); background: var(--fill); font-weight: 500; }
+
+  .recent-fires {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .recent-fires h4 { margin: 0 0 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  .fire-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 10px; font-size: 12px; padding: 3px 0; }
+  .fire-row .dot { color: var(--running); font-family: ui-monospace, monospace; }
+  .fire-row.failed .dot { color: #b73a3a; }
+  .fire-row .when { color: var(--muted); font-size: 11px; }
+
+  .editor-foot { border-top: 1px solid var(--line); padding: 10px 14px; display: flex; gap: 8px; align-items: center; background: var(--bg); }
+  .editor-foot .right { margin-left: auto; display: flex; gap: 8px; }
+  .editor-foot .ctrl { font-size: 12px; border: 1px solid var(--line); padding: 4px 12px; background: var(--bg); }
+  .editor-foot .ctrl.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .editor-foot .ctrl.danger { color: #b73a3a; border-color: #b73a3a; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span></div>
+    <div class="sb-list">
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Manager</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Voice</div></div><span class="when"></span></div>
+
+      <div class="divider"></div>
+
+      <div class="folder-head">bed-planner</div>
+      <div class="row in-folder"><span class="status running">●</span><div class="body"><div class="name">fix layout bug</div></div><span class="when">2m</span></div>
+
+      <div class="folder-head">portfolio</div>
+      <div class="row in-folder"><span class="status waiting">!</span><div class="body"><div class="name">approve manifest write</div></div><span class="when">4m</span></div>
+
+      <div class="folder-head">health-tracker</div>
+      <div class="row in-folder"><span class="status idle">·</span><div class="body"><div class="name">weekly summary script</div></div><span class="when">38m</span></div>
+    </div>
+
+    <div class="arch-toggle">▸ archived (12)</div>
+
+    <div class="sb-bottom">
+      <span class="sb-link active">Schedules</span>
+      <span class="sb-link">Settings</span>
+      <button class="btn-block">[ + new chat ]</button>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <!-- MAIN: schedules list -->
+  <div class="main">
+    <div class="main-head">
+      <span class="title">Schedules</span>
+      <span class="right">
+        <input class="search" type="text" placeholder="search…" value="">
+        <span class="ctrl primary">[ + new ]</span>
+      </span>
+    </div>
+
+    <div class="schedules">
+      <div class="sched-row head">
+        <span>name</span>
+        <span>trigger</span>
+        <span>action</span>
+        <span>last fired</span>
+        <span>on/off</span>
+      </div>
+
+      <div class="sched-row">
+        <span class="name">bus-watch</span>
+        <span class="trig">weekdays at 8:57</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>bus-watch</span>
+        <span class="last-fired">today 08:57</span>
+        <span><span class="toggle"></span></span>
+      </div>
+
+      <div class="sched-row">
+        <span class="name">weekly newsletter</span>
+        <span class="trig">Sundays at 9am</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>weekly-newsletter</span>
+        <span class="last-fired">Sun 09:00</span>
+        <span><span class="toggle"></span></span>
+      </div>
+
+      <div class="sched-row">
+        <span class="name">todoist @claude tasks</span>
+        <span class="trig">Todoist task tagged @claude</span>
+        <span class="action-cell"><span class="verb">spawn · prompt</span>"work the task per the description"</span>
+        <span class="last-fired">3h ago</span>
+        <span><span class="toggle"></span></span>
+      </div>
+
+      <div class="sched-row">
+        <span class="name">standup prep</span>
+        <span class="trig">30 min before "standup" calendar events</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>standup-prep</span>
+        <span class="last-fired">yesterday</span>
+        <span><span class="toggle"></span></span>
+      </div>
+
+      <div class="sched-row selected">
+        <span class="name">github merge alerts</span>
+        <span class="trig">GitHub webhook /gh-83df…</span>
+        <span class="action-cell"><span class="verb">message · prompt</span>Manager</span>
+        <span class="last-fired">12m ago</span>
+        <span><span class="toggle"></span></span>
+      </div>
+
+      <div class="sched-row">
+        <span class="name">bin day reminder</span>
+        <span class="trig">Mondays at 7pm</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>bins-reminder</span>
+        <span class="last-fired">Mon 19:00</span>
+        <span><span class="toggle"></span></span>
+      </div>
+
+      <div class="sched-row disabled">
+        <span class="name">old health digest</span>
+        <span class="trig">every day at 8am</span>
+        <span class="action-cell"><span class="verb">spawn · skill</span>health-digest</span>
+        <span class="last-fired">2 weeks ago</span>
+        <span><span class="toggle off"></span></span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <!-- RIGHT RAIL: editor for selected job -->
+  <div class="editor">
+    <div class="editor-head">
+      <span class="title">github merge alerts</span>
+      <span class="right">
+        <span class="toggle-label">enabled</span>
+        <span class="toggle"></span>
+        <span class="ctrl">×</span>
+      </span>
+    </div>
+
+    <div class="editor-body">
+
+      <div class="field">
+        <label>name</label>
+        <input type="text" value="github merge alerts">
+      </div>
+
+      <div class="field">
+        <label>trigger</label>
+        <div class="row-2">
+          <select>
+            <option>webhook ▾</option>
+          </select>
+          <input type="text" value="https://patch.tom.example/webhook/gh-83df1c2a" readonly style="font-family: ui-monospace, monospace; color: var(--muted); background: var(--fill);">
+        </div>
+        <div class="help">unguessable URL. paste this into your GitHub repo's Webhooks settings.</div>
+      </div>
+
+      <div class="field">
+        <label>signature</label>
+        <div class="row-2">
+          <select>
+            <option>github ▾</option>
+          </select>
+          <input type="text" value="••••••••••••••••" style="font-family: ui-monospace, monospace;">
+        </div>
+        <div class="help">scheme: github (X-Hub-Signature-256). secret matches what you set in GitHub. server verifies; drops on mismatch.</div>
+      </div>
+
+      <div class="field">
+        <label>filter (jsonata, agent-generated)</label>
+        <textarea>payload.action = 'closed' and payload.pull_request.merged = true and payload.pull_request.base.ref = 'main'</textarea>
+        <div class="help">evaluated server-side, microseconds, no LLM. firehose-safe.</div>
+      </div>
+
+      <div class="field">
+        <label>action — where</label>
+        <div class="action-tabs">
+          <span class="t">spawn new chat</span>
+          <span class="t active">message existing chat</span>
+        </div>
+        <select>
+          <option>Manager (special thread) ▾</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>action — what</label>
+        <div class="action-tabs">
+          <span class="t">run a skill</span>
+          <span class="t active">run a prompt</span>
+        </div>
+        <textarea style="height: 48px;">PR merged: {{payload.pull_request.title}} by {{payload.pull_request.user.login}}</textarea>
+      </div>
+
+    </div>
+
+    <div class="editor-foot">
+      <span class="ctrl danger">delete</span>
+      <span class="right">
+        <span class="ctrl">cancel</span>
+        <span class="ctrl primary">[Save]</span>
+      </span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

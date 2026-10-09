@@ -1,0 +1,223 @@
+#!/bin/sh
+# Install (or upgrade to) the Patch server release this file sits in.
+#
+#   ./install [--home DIR] [--no-service] [--system [--user NAME]]
+#             [--public-url URL] [--host ADDR]
+#
+# --home        the install home (default ~/.patch-server)
+# --no-service  lay the release out and stop there: no systemd unit, no start.
+#               For machines without systemd — run <home>/current/patch-server
+#               yourself with PATCH_SERVER_HOME and PATCH_NODE set.
+# --system      a system-wide unit (/etc/systemd/system) running as --user
+#               (default: the user running this), for a server box. Needs root.
+# --public-url  where devices reach this server; written to server.env on a
+#               first install. Optional: a server works without it, it only
+#               means the pairing code and the host-install command have an
+#               address to carry.
+# --host        the address the server listens on (default 127.0.0.1, behind a
+#               TLS proxy; 0.0.0.0 to serve a LAN directly). First install only.
+#
+# The install home holds the running app and nothing else — it is never a git
+# checkout, so nothing done to source code can touch it:
+#
+#   versions/<release>/   unpacked releases (the current one and two before it)
+#   current               -> versions/<release>, swapped atomically
+#   data/                 the server's state
+#   downloads/            the update channel (daemon, APK, desktop)
+#   server.env            config + secrets, mode 600
+#   logs/server.log
+#
+# A first install writes server.env from the template and carries straight on:
+# the server needs nothing configured (spec/01 § Starting with no settings), and
+# makes its own secrets in data/ on its first start. An install copies the
+# release in, swaps `current`, restarts the unit and waits until /api/healthz
+# reports this release's commit. NO FALLBACKS: anything off is a loud failure.
+set -eu
+
+REL=$(cd "$(dirname "$0")" && pwd -P)
+HOME_DIR="${HOME}/.patch-server"
+SERVICE=1
+SYSTEM=0
+RUN_USER=$(id -un)
+PUBLIC_URL=""
+LISTEN_HOST="127.0.0.1"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --home) HOME_DIR="$2"; shift 2 ;;
+    --home=*) HOME_DIR="${1#--home=}"; shift ;;
+    --no-service) SERVICE=0; shift ;;
+    --system) SYSTEM=1; shift ;;
+    --user) RUN_USER="$2"; shift 2 ;;
+    --user=*) RUN_USER="${1#--user=}"; shift ;;
+    --public-url) PUBLIC_URL="$2"; shift 2 ;;
+    --public-url=*) PUBLIC_URL="${1#--public-url=}"; shift ;;
+    --host) LISTEN_HOST="$2"; shift 2 ;;
+    --host=*) LISTEN_HOST="${1#--host=}"; shift ;;
+    *) echo "install: unknown argument $1" >&2; exit 2 ;;
+  esac
+done
+die() { echo "install: $*" >&2; exit 1; }
+if [ "${SYSTEM}" = 1 ] && [ "$(id -u)" != 0 ]; then die "--system needs root"; fi
+
+# A Node the installer provisioned inside the home wins over whatever is on PATH.
+if [ -x "${HOME_DIR}/node/bin/node" ]; then NODE="${HOME_DIR}/node/bin/node"; else NODE=$(command -v node || true); fi
+[ -n "${NODE}" ] || die "node is not on PATH — install Node 20 or newer"
+NODE_MAJOR=$("${NODE}" -p 'process.versions.node.split(".")[0]')
+[ "${NODE_MAJOR}" -ge 20 ] || die "node ${NODE_MAJOR} at ${NODE} is too old — need 20 or newer"
+
+info() { "${NODE}" -p "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))[process.argv[2]] ?? ''" "${REL}/build-info.json" "$1"; }
+RELEASE=$(info release)
+GIT_SHA=$(info gitSha)
+[ -n "${RELEASE}" ] && [ -n "${GIT_SHA}" ] || die "${REL}/build-info.json has no release/gitSha — not a built release"
+
+mkdir -p "${HOME_DIR}/versions" "${HOME_DIR}/data" "${HOME_DIR}/downloads" "${HOME_DIR}/logs"
+HOME_DIR=$(cd "${HOME_DIR}" && pwd -P)
+
+ENV_FILE="${HOME_DIR}/server.env"
+if [ ! -f "${ENV_FILE}" ]; then
+  # Two concurrent installs both reach this line, so the file is built under a
+  # private name and hard-linked into place: `ln` refuses an existing target, so
+  # the first writer wins and no reader ever sees a half-written server.env.
+  # Writing straight to ${ENV_FILE} truncated the other install's file under its
+  # own `grep` and killed it with "PORT is empty".
+  ENV_TMP="${ENV_FILE}.$$"
+  rm -f "${ENV_TMP}"
+  sed -e "s|^HOST=.*|HOST=${LISTEN_HOST}|" "${REL}/server.env.example" > "${ENV_TMP}"
+  if [ -n "${PUBLIC_URL}" ]; then
+    sed -i.bak "s|^# PATCH_PUBLIC_URL=\$|PATCH_PUBLIC_URL=${PUBLIC_URL}|" "${ENV_TMP}" && rm -f "${ENV_TMP}.bak"
+  fi
+  chmod 600 "${ENV_TMP}"
+  if ln "${ENV_TMP}" "${ENV_FILE}" 2>/dev/null; then
+    echo "Wrote ${ENV_FILE}."
+  fi
+  rm -f "${ENV_TMP}"
+fi
+grep -q "^PORT=..*" "${ENV_FILE}" || die "PORT is empty in ${ENV_FILE}"
+
+# Never install half a release: `current` must only ever point at a tree the
+# launcher will accept (the same check patch-server makes).
+if [ ! -f "${REL}/server/dist/index.js" ] || [ ! -f "${REL}/web/index.html" ] || [ ! -f "${REL}/build-info.json" ]; then
+  die "${REL} is not a complete release"
+fi
+
+# One install at a time per home. Two deploys of the same commit build the same
+# release name and used to delete each other's versions/<release> mid-copy,
+# leaving `current` on a tree with no server/ or web/. mkdir is the atomic lock;
+# a holder that died (its pid is gone) is stolen from.
+LOCK="${HOME_DIR}/install.lock"
+i=0
+until mkdir "${LOCK}" 2>/dev/null; do
+  HOLDER=$(cat "${LOCK}/pid" 2>/dev/null || true)
+  if [ -n "${HOLDER}" ] && ! kill -0 "${HOLDER}" 2>/dev/null; then
+    rm -rf "${LOCK}"
+    continue
+  fi
+  i=$((i + 1))
+  [ "${i}" -lt 600 ] || die "another install has held ${LOCK} (pid ${HOLDER:-unknown}) for 10 minutes"
+  sleep 1
+done
+echo $$ > "${LOCK}/pid"
+STAGE=""
+HELD=1
+release_lock() { [ "${HELD}" = 0 ] || rm -rf "${LOCK}"; HELD=0; }
+cleanup() { [ -z "${STAGE}" ] || rm -rf "${STAGE}"; release_lock; }
+trap cleanup EXIT
+trap 'exit 1' INT TERM HUP
+
+# Copy in, then swap. Re-installing the release that is already current is a
+# repair: it replaces that directory's contents. The copy goes to a staging dir
+# of its own and is moved over the target, so the target is never half-copied.
+TARGET="${HOME_DIR}/versions/${RELEASE}"
+if [ "${REL}" != "${TARGET}" ]; then
+  STAGE="${TARGET}.new.$$"
+  rm -rf "${STAGE}"
+  cp -R "${REL}" "${STAGE}"
+  rm -rf "${TARGET}"
+  mv "${STAGE}" "${TARGET}"
+  STAGE=""
+fi
+"${NODE}" -e "
+  const fs = require('fs');
+  const [home, target] = process.argv.slice(1);
+  fs.rmSync(home + '/current.new', { force: true });
+  fs.symlinkSync(target, home + '/current.new');
+  fs.renameSync(home + '/current.new', home + '/current');
+" "${HOME_DIR}" "${TARGET}"
+echo "installed release ${RELEASE} (${GIT_SHA}) → ${HOME_DIR}/current"
+
+# Keep the current release and the two newest before it, for a hand rollback.
+"${NODE}" -e "
+  const fs = require('fs'); const path = require('path');
+  const [dir, keep] = process.argv.slice(1);
+  const old = fs.readdirSync(dir)
+    .map((n) => path.join(dir, n))
+    .filter((p) => p !== keep)
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)
+    .slice(2);
+  for (const p of old) { fs.rmSync(p, { recursive: true, force: true }); console.log('removed old release ' + path.basename(p)); }
+" "${HOME_DIR}/versions" "${TARGET}"
+
+release_lock
+
+# A server that runs as someone else owns its home.
+if [ "${SYSTEM}" = 1 ]; then chown -R "${RUN_USER}" "${HOME_DIR}"; fi
+
+[ "${SERVICE}" = 1 ] || exit 0
+
+command -v systemctl >/dev/null || die "no systemctl here — re-run with --no-service and start ${HOME_DIR}/current/patch-server yourself"
+if [ "${SYSTEM}" = 1 ]; then
+  UNIT_DIR=/etc/systemd/system
+  WANTED_BY=multi-user.target
+  SYSTEMCTL="systemctl"
+  RUN_AS="User=${RUN_USER}"
+else
+  UNIT_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+  WANTED_BY=default.target
+  SYSTEMCTL="systemctl --user"
+  RUN_AS=""
+fi
+mkdir -p "${UNIT_DIR}"
+cat > "${UNIT_DIR}/patch-server.service" <<EOF
+# Written by the Patch server installer. Re-running it rewrites this file.
+[Unit]
+Description=Patch server
+After=network-online.target
+
+[Service]
+Type=simple
+${RUN_AS}
+EnvironmentFile=${ENV_FILE}
+Environment="PATCH_SERVER_HOME=${HOME_DIR}"
+Environment="PATCH_NODE=${NODE}"
+Environment="PATH=${PATH}"
+ExecStart=${HOME_DIR}/current/patch-server
+Restart=on-failure
+RestartSec=3s
+StandardOutput=append:${HOME_DIR}/logs/server.log
+StandardError=append:${HOME_DIR}/logs/server.log
+
+[Install]
+WantedBy=${WANTED_BY}
+EOF
+${SYSTEMCTL} daemon-reload
+${SYSTEMCTL} enable patch-server >/dev/null 2>&1
+${SYSTEMCTL} restart patch-server
+
+PORT=$(sed -n 's/^PORT=//p' "${ENV_FILE}" | tail -n 1)
+[ -n "${PORT}" ] || die "PORT is not set in ${ENV_FILE}"
+i=0
+while :; do
+  SERVED=$(curl -sf "http://127.0.0.1:${PORT}/api/healthz" 2>/dev/null | "${NODE}" -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).gitSha??'')}catch{}})" || true)
+  [ "${SERVED}" = "${GIT_SHA}" ] && break
+  i=$((i + 1))
+  if [ "${i}" -ge 60 ]; then
+    tail -n 30 "${HOME_DIR}/logs/server.log" >&2 || true
+    die "server did not come up on :${PORT} reporting ${GIT_SHA} within 60s (last answer: '${SERVED}')"
+  fi
+  sleep 1
+done
+echo "patch-server is up on :${PORT} serving ${GIT_SHA}"
+
+if [ "${SYSTEM}" = 0 ] && command -v loginctl >/dev/null && [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" != yes ]; then
+  echo "NOTE: lingering is off for $(id -un), so the server stops when you log out. To keep it running: sudo loginctl enable-linger $(id -un)"
+fi

@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · settings (low-fi v02)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --voice: #b73a3a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .stage {
+    width: 1280px;
+    height: 920px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 280px 6px 1fr;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+  }
+  .gutter {
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    cursor: col-resize;
+    position: relative;
+  }
+  .gutter::before {
+    content: '⋮';
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--muted); font-size: 12px; line-height: 1;
+  }
+
+  /* SIDEBAR */
+  .sidebar { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .brandbar { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .brandbar .brand { font-weight: 600; }
+  .sb-list { flex: 1; overflow: hidden; padding: 4px 0; }
+  .row { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; padding: 4px 12px; align-items: baseline; }
+  .row.special .body .name { font-weight: 600; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.idle { color: var(--muted); }
+  .row .status.special { color: var(--muted); }
+  .row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .when { font-size: 11px; color: var(--muted); }
+  .row.in-folder { padding-left: 24px; }
+  .folder-head { padding: 8px 12px 2px; color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+  .divider { border-top: 1px solid var(--line); margin: 4px 0; }
+  .arch-toggle { padding: 6px 12px; color: var(--muted); font-size: 12px; border-top: 1px dashed var(--line); }
+  .sb-bottom { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .sb-link { padding: 3px 0; }
+  .sb-link.active { background: var(--accent); padding: 3px 6px; margin: 0 -6px; }
+  .btn-block { margin-top: 4px; display: block; width: 100%; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); text-align: center; font-size: 12px; }
+
+  /* MAIN: settings */
+  .main { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-head { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
+  .main-head .title { font-weight: 600; font-size: 16px; }
+
+  .scroll { flex: 1; overflow: auto; padding: 0; }
+  .section { padding: 18px 24px; border-bottom: 1px solid var(--line); }
+  .section h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+
+  .field-row { display: grid; grid-template-columns: 200px 1fr auto; gap: 14px; align-items: baseline; padding: 6px 0; }
+  .field-row .label { color: var(--muted); font-size: 13px; }
+  .field-row .val { font-family: ui-monospace, monospace; font-size: 13px; }
+  .field-row .val.muted { color: var(--muted); }
+  .field-row .actions { display: flex; gap: 6px; }
+  .field-row .ctrl { font-size: 11px; border: 1px solid var(--line); padding: 2px 8px; background: var(--bg); }
+  .field-row .ctrl.danger { color: var(--voice); border-color: var(--voice); }
+  .field-row .ctrl.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  .surface-row {
+    display: grid;
+    grid-template-columns: 14px 1fr auto auto;
+    gap: 12px;
+    align-items: baseline;
+    padding: 6px 0;
+  }
+  .surface-row .dot { font-family: ui-monospace, monospace; font-size: 13px; }
+  .surface-row .dot.live { color: var(--running); }
+  .surface-row .dot.away { color: var(--muted); }
+  .surface-row .name { font-weight: 500; }
+  .surface-row .name .kind { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .surface-row .when { color: var(--muted); font-size: 12px; }
+  .surface-row .ctrl { font-size: 11px; border: 1px solid var(--line); padding: 2px 8px; background: var(--bg); color: var(--voice); border-color: var(--voice); }
+
+  .pairing {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--line);
+  }
+  .pairing .panel {
+    padding: 14px;
+    border-right: 1px solid var(--line);
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .pairing .panel:last-child { border-right: none; }
+  .pairing .qr {
+    width: 84px; height: 84px;
+    background: repeating-conic-gradient(var(--ink) 0% 25%, var(--bg) 0% 50%) 0 / 12px 12px;
+    border: 5px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--ink) inset;
+    flex-shrink: 0;
+  }
+  .pairing .icon-box {
+    width: 84px; height: 84px;
+    border: 1px solid var(--ink);
+    background: var(--fill);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px;
+    flex-shrink: 0;
+  }
+  .pairing .desc h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+  .pairing .desc p { margin: 0 0 6px; font-size: 12px; color: var(--ink); }
+  .pairing .desc .sub { color: var(--muted); font-size: 11px; }
+
+  .claude-state {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 14px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--line);
+    background: var(--fill);
+  }
+  .claude-state .icon {
+    width: 40px; height: 40px;
+    border: 1px solid var(--ink);
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .claude-state .name { font-weight: 500; }
+  .claude-state .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .claude-state .ctrl { font-size: 12px; border: 1px solid var(--line); padding: 4px 12px; background: var(--bg); }
+  .claude-state .ctrl.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  code { font-family: ui-monospace, monospace; font-size: 12px; background: var(--fill); padding: 1px 4px; }
+
+  .help-line { font-size: 11px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span></div>
+    <div class="sb-list">
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Manager</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Voice</div></div><span class="when"></span></div>
+      <div class="divider"></div>
+      <div class="folder-head">bed-planner</div>
+      <div class="row in-folder"><span class="status running">●</span><div class="body"><div class="name">fix layout bug</div></div><span class="when">2m</span></div>
+      <div class="folder-head">portfolio</div>
+      <div class="row in-folder"><span class="status waiting">!</span><div class="body"><div class="name">approve manifest write</div></div><span class="when">4m</span></div>
+    </div>
+    <div class="arch-toggle">▸ archived (12)</div>
+    <div class="sb-bottom">
+      <span class="sb-link">Schedules</span>
+      <span class="sb-link active">Settings</span>
+      <button class="btn-block">[ + new chat ]</button>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <!-- MAIN: settings -->
+  <div class="main">
+    <div class="main-head">
+      <span class="title">Settings</span>
+    </div>
+
+    <div class="scroll">
+
+      <!-- ── ACCOUNT ─────────────────────── -->
+      <div class="section">
+        <h3>account</h3>
+        <div class="field-row">
+          <span class="label">email</span>
+          <span class="val">tom.chambers@gmail.com</span>
+          <span class="actions"><span class="ctrl danger">sign out</span></span>
+        </div>
+      </div>
+
+      <!-- ── CLAUDE SUBSCRIPTION ─────────── -->
+      <div class="section">
+        <h3>claude subscription</h3>
+        <div class="claude-state">
+          <span class="icon">★</span>
+          <div>
+            <div class="name">Connected — Claude Pro</div>
+            <div class="sub">tom.chambers@anthropic.com</div>
+          </div>
+          <span class="ctrl">disconnect</span>
+        </div>
+      </div>
+
+      <!-- ── SURFACES ────────────────────── -->
+      <div class="section">
+        <h3>surfaces — devices using patch</h3>
+
+        <div class="surface-row">
+          <span class="dot live">●</span>
+          <span class="name">this Mac <span class="kind">— web (Chrome)</span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="surface-row">
+          <span class="dot live">●</span>
+          <span class="name">iPhone 15 <span class="kind">— mobile app</span></span>
+          <span></span>
+          <span class="ctrl">remove</span>
+        </div>
+        <div class="surface-row">
+          <span class="dot live">●</span>
+          <span class="name">kitchen voice device <span class="kind">— HA Voice PE</span></span>
+          <span></span>
+          <span class="ctrl">remove</span>
+        </div>
+        <div class="surface-row">
+          <span class="dot away">○</span>
+          <span class="name">old Mac <span class="kind">— web</span></span>
+          <span></span>
+          <span class="ctrl">remove</span>
+        </div>
+
+        <div class="pairing">
+          <div class="panel">
+            <div class="qr"></div>
+            <div class="desc">
+              <h4>add a browser surface</h4>
+              <p class="sub">scan from the new device, or visit <code>patch.tom.example/pair</code>.</p>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="icon-box">🎙</div>
+            <div class="desc">
+              <h4>add a voice device</h4>
+              <p class="sub">on the device's setup AP, paste daemon URL + a one-time token. <a href="">copy token</a> · <a href="">flashing instructions</a>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── INTEGRATION KEYS ────────────── -->
+      <div class="section">
+        <h3>integration keys</h3>
+
+        <div class="field-row">
+          <span class="label">TELEGRAM_BOT_TOKEN</span>
+          <span class="val muted">••••••••:•••••••••••••••••••••••••</span>
+          <span class="actions"><span class="ctrl">edit</span></span>
+        </div>
+        <div class="field-row">
+          <span class="label">GITHUB_TOKEN</span>
+          <span class="val muted">ghp_••••••••••••••••••••••••••••••</span>
+          <span class="actions"><span class="ctrl">edit</span></span>
+        </div>
+        <div class="field-row">
+          <span class="label">TODOIST_TOKEN</span>
+          <span class="val muted">— not set —</span>
+          <span class="actions"><span class="ctrl">add</span></span>
+        </div>
+      </div>
+
+      <!-- ── DAEMON ──────────────────────── -->
+      <div class="section">
+        <h3>daemon</h3>
+        <div class="field-row">
+          <span class="label">status</span>
+          <span class="val"><span style="color: var(--running);">● connected</span></span>
+          <span></span>
+        </div>
+      </div>
+
+      <!-- ── ROOT FOLDER ─────────────────── -->
+      <div class="section">
+        <h3>patch root</h3>
+        <div class="field-row">
+          <span class="label">folder</span>
+          <span class="val">/Users/tom/projects/portfolio</span>
+          <span class="actions"><span class="ctrl">change…</span></span>
+        </div>
+      </div>
+
+      <!-- ── VOICE MODELS ────────────────── -->
+      <div class="section">
+        <h3>voice models</h3>
+        <div class="field-row">
+          <span class="label">STT</span>
+          <span class="val">Whisper · large-v3-turbo</span>
+          <span class="actions"><span class="ctrl">change…</span></span>
+        </div>
+        <div class="field-row">
+          <span class="label">TTS</span>
+          <span class="val">Kokoro · af_bella</span>
+          <span class="actions"><span class="ctrl">change…</span></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

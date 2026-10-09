@@ -1,0 +1,4 @@
+{ "screens": [
+  { "id": "start", "name": "Start", "path": "index.html#start" },
+  { "id": "live",  "name": "Live meeting", "path": "index.html#live" },
+  { "id": "after", "name": "After the meeting", "path": "index.html#after" } ] }

@@ -1,0 +1,46 @@
+node_modules/
+# NOTE: no blanket `dist/` — workspace packages (e.g. @patch/wire) publish via
+# their built dist/, which Metro must resolve at bundle time. The big per-surface
+# dist dirs are ignored explicitly below (apps/mobile/dist, packages/web/dist).
+build/
+.turbo/
+.vite/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+deploy/.env
+data/
+models/
+coverage/
+.pnpm-store/
+*.log
+
+# Python voice sidecars
+.venv/
+__pycache__/
+*.pyc
+
+# Per-surface build outputs
+packages/desktop/release/
+packages/web/dist/
+packages/voice-firmware/build/
+packages/voice-firmware/sdkconfig
+packages/voice-firmware/sdkconfig.old
+packages/voice-firmware/managed_components/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/android/build/
+apps/mobile/android/app/build/
+apps/mobile/ios/build/
+deploy/certs/
+
+# daemon dev runtime state + sockets (NOT all gitignored — sockets break the EAS tarball copy)
+.dev-data/
+.dev-data-*/
+.patch/
+**/.patch/
+*.sock
+.tmp/
+.cadence/
+.dev-data-cli/

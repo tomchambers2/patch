@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · Manager incoming-call banner (low-fi v01)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --voice: #b73a3a;
+    --voice-bg: #fef5f5;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .stage {
+    width: 1280px;
+    height: 800px;
+    margin: 0 auto;
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 280px 6px 1fr 6px 380px;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+    position: relative;
+  }
+  .gutter { background: var(--bg); border-left: 1px solid var(--line); border-right: 1px solid var(--line); position: relative; }
+  .gutter::before { content: '⋮'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--muted); font-size: 12px; line-height: 1; }
+
+  /* SIDEBAR (dimmed behind the banner) */
+  .sidebar { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; opacity: 0.6; }
+  .brandbar { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .brandbar .brand { font-weight: 600; }
+  .sb-list { flex: 1; overflow: hidden; padding: 4px 0; }
+  .row { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; padding: 4px 12px; align-items: baseline; }
+  .row.special .body .name { font-weight: 600; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.idle { color: var(--muted); }
+  .row .status.special { color: var(--muted); }
+  .row .status.special.calling { color: var(--voice); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .when { font-size: 11px; color: var(--muted); }
+  .row.in-folder { padding-left: 24px; }
+  .folder-head { padding: 8px 12px 2px; color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+  .divider { border-top: 1px solid var(--line); margin: 4px 0; }
+  .arch-toggle { padding: 6px 12px; color: var(--muted); font-size: 12px; border-top: 1px dashed var(--line); }
+  .sb-bottom { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .sb-link { padding: 3px 0; }
+  .btn-block { margin-top: 4px; display: block; width: 100%; padding: 6px 8px; border: 1px solid var(--line); background: var(--bg); text-align: center; font-size: 12px; }
+
+  /* MAIN (dimmed) */
+  .main { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; overflow: hidden; opacity: 0.4; }
+  .main-head { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: baseline; }
+  .main-head .folder { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
+  .main-head .title { font-weight: 600; }
+  .main-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .main-head .ctrl { font-size: 12px; border: 1px solid var(--line); padding: 2px 8px; background: var(--bg); }
+  .stream { flex: 1; padding: 14px; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .msg { padding: 8px 10px; border: 1px solid var(--line); }
+  .msg.user { background: var(--fill); }
+  .msg .role { font-size: 10px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.05em; }
+
+  .editor { grid-column: 5; grid-row: 1; background: var(--fill); padding: 14px; opacity: 0.4; }
+  .editor .box { height: 100%; border: 1px dashed var(--line); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+
+  /* INCOMING-CALL BANNER */
+  .banner {
+    position: absolute;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 540px;
+    background: var(--bg);
+    border: 2px solid var(--voice);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    z-index: 10;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .banner-head {
+    background: var(--voice);
+    color: var(--bg);
+    padding: 8px 16px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .banner-head .ringing-dot {
+    font-family: ui-monospace, monospace;
+    animation: pulse 1.2s infinite;
+  }
+  .banner-head .right { margin-left: auto; font-family: ui-monospace, monospace; }
+
+  .banner-body {
+    padding: 28px 28px 20px;
+    display: flex; flex-direction: column; gap: 18px;
+    align-items: stretch;
+  }
+  .banner-body .who {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .banner-body .who .icon {
+    width: 56px; height: 56px;
+    border: 2px solid var(--ink);
+    background: var(--fill);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+  }
+  .banner-body .who .name {
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .banner-body .who .sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 2px;
+  }
+  .banner-body .reason {
+    background: var(--voice-bg);
+    border: 1px solid var(--voice);
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .banner-body .reason .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--voice);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .banner-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border-top: 1px solid var(--line);
+  }
+  .banner-actions .btn {
+    padding: 18px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    border-right: 1px solid var(--line);
+  }
+  .banner-actions .btn:last-child { border-right: none; }
+  .banner-actions .btn.accept {
+    background: var(--voice);
+    color: var(--bg);
+  }
+  .banner-actions .btn.dismiss {
+    background: var(--bg);
+    color: var(--ink);
+  }
+  .banner-foot {
+    padding: 8px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--fill);
+    color: var(--muted);
+    font-size: 11px;
+    display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- SIDEBAR (dimmed) -->
+  <div class="sidebar">
+    <div class="brandbar"><span class="brand">patch</span></div>
+    <div class="sb-list">
+      <div class="row special"><span class="status special calling">★</span><div class="body"><div class="name">Manager</div></div><span class="when" style="color: var(--voice);">calling</span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div><span class="when"></span></div>
+      <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Voice</div></div><span class="when"></span></div>
+      <div class="divider"></div>
+      <div class="folder-head">bed-planner</div>
+      <div class="row in-folder"><span class="status running">●</span><div class="body"><div class="name">fix layout bug</div></div><span class="when">2m</span></div>
+      <div class="folder-head">portfolio</div>
+      <div class="row in-folder"><span class="status waiting">!</span><div class="body"><div class="name">approve manifest write</div></div><span class="when">4m</span></div>
+    </div>
+    <div class="arch-toggle">▸ archived (12)</div>
+    <div class="sb-bottom">
+      <span class="sb-link">Schedules</span>
+      <span class="sb-link">Settings</span>
+      <button class="btn-block">[ + new chat ]</button>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+
+  <!-- MAIN (dimmed) -->
+  <div class="main">
+    <div class="main-head">
+      <span class="folder">~/projects/bed-planner</span>
+      <span class="title">— fix layout bug</span>
+      <span class="right">
+        <span class="ctrl">[voice]</span>
+        <span class="ctrl">[files]</span>
+      </span>
+    </div>
+    <div class="stream">
+      <div class="msg user"><div class="role">user</div>fix the layout bug — the right column is overlapping the editor on narrow screens.</div>
+      <div class="msg"><div class="role">assistant</div>I'll start by reading the layout file.</div>
+    </div>
+  </div>
+
+  <div class="gutter"></div>
+  <div class="editor"><div class="box">editor</div></div>
+
+  <!-- INCOMING-CALL BANNER -->
+  <div class="banner">
+    <div class="banner-head">
+      <span class="ringing-dot">●</span>
+      <span>Manager is calling</span>
+      <span class="right">00:08 ringing</span>
+    </div>
+
+    <div class="banner-body">
+      <div class="who">
+        <div class="icon">★</div>
+        <div>
+          <div class="name">Manager</div>
+          <div class="sub">special thread · voice session</div>
+        </div>
+      </div>
+
+      <div class="reason">
+        <div class="label">why it's calling</div>
+        Build of <code>health-tracker</code> failed in CI. Manager wants your call to decide whether to retry or roll back.
+      </div>
+    </div>
+
+    <div class="banner-actions">
+      <div class="btn dismiss">Dismiss</div>
+      <div class="btn accept">Accept · ⏎</div>
+    </div>
+
+    <div class="banner-foot">
+      <span>auto-dismiss in 22s → falls through to the inbox (no push, you're at the desk)</span>
+      <span>esc dismiss</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

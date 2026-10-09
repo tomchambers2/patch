@@ -1,0 +1,735 @@
+[
+  {
+    "group-id": "A1",
+    "name": "Wire contract — every event knows its host",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [],
+    "tasks": [
+      {
+        "task": "The protocol currently assumes there is exactly one machine running agent sessions. It must become host-addressed, because every other group in this change builds against it. This is the shared contract server, daemon, CLI, web, desktop and mobile all import, so it lands first.\n\nThis IS a breaking change to a named set of events, and the task is to make that change deliberately and completely rather than to preserve every existing shape. The following events gain a host identifier, and every producer and consumer of them must be updated in this same change so nothing is left decoding an old shape:\n\n- the spawned-chat event, which carries the host the chat is pinned to, fixed for that chat's life\n- the spawn request, where naming a host is REQUIRED, not optional\n- host-presence online and offline, each naming the host it describes\n- the unauthenticated report, naming both the host and the agent backend whose credential is missing or expired\n- the folder-registry snapshot and its change push, each naming the host whose filesystem they describe\n- the model-catalogue request and response, where the response's entries additionally name the backend serving each model and the response can carry a per-backend error list alongside the models that resolved\n- the terminal-open request, naming the host the shell starts on\n- the cross-chat spawn call, naming the host the new chat is created on\n- the cross-chat chat-listing response, where each listed chat names its host\n- chat state, which additionally carries the effective permission mode the next turn will use\n- the connection greeting the server sends a surface, which carries every registered host's presence plus that host's last self-description and last per-backend account report\n\nThe existing single-backend account report is replaced by a per-backend one identifying host and backend together.\n\nNew events to define:\n\n- a host self-description: host id, user-editable host name, platform, architecture, daemon version, whether a daemon update is available, the host's default permission mode, its provisioned agent backends (id, label, version, state) and its optional components (id, label, size in bytes, state of not-installed / downloading / installed / failed, plus optional progress and error)\n- surface-to-server: rename a host; make a host the account's home host\n- surface-to-host: set that host's default permission mode; install or remove an optional component; apply an available daemon update now\n- host-to-surfaces: live component-download progress carrying state, received and total bytes and an optional error\n- surface-to-daemon: a per-chat settings frame carrying the chat's permission-mode override, where omitting the field CLEARS the override rather than meaning no change\n\nWhat must NOT change, and must be regression-guarded: per-chat monotonic sequence numbering and which events carry a sequence at all; the deliberately opposite boundary conventions of the reconnect cursor (exclusive) and the history paging cursor (inclusive); idempotency on the pairing of chat and client-generated input id; which events are live-only and therefore never persisted or replayed — the streamed text chunks, the queue and dequeue notices, the input acknowledgement, and the new component-progress frame, whose settled result lands on the host self-description instead; and the binary framing of audio. chat.spawn_request additionally gains an OPTIONAL `model`, fixed for the chat's life once set. A spawn that omits it takes the host's last-used model, which the daemon records per host and reports on daemon.host as lastUsedModel — so no surface is obliged to collect one. Resolution happens daemon-side, and a spawn omitting the model on a host that has never run a chat is a loud error rather than a guess. `hello` gains clientGitSha and clientBuiltAt for version reporting. Any event not named above keeps its current shape and meaning.\n\nUnhappy paths belong here because this is where they are cheapest to catch: a spawn request carrying no host; a frame naming a host that is not registered; a component operation naming a component the host does not offer; a permission mode outside the set its backend accepts; an empty host name. Each must be rejected by validation with the offending value named, never silently defaulted, dropped, or routed to whichever host happens to be attached.\n\nThe contract ships as both runtime validation and types, and every consuming package must compile and decode against it before this group is done.",
+        "spec_sections": [
+          "03-wire-protocol.md ## Event categories",
+          "03-wire-protocol.md ### Session events (daemon → server → surfaces)",
+          "03-wire-protocol.md ### Host events",
+          "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+          "03-wire-protocol.md ### Terminal sessions (surface ↔ daemon)",
+          "03-wire-protocol.md ### Cross-chat tools",
+          "03-wire-protocol.md ### Control (anywhere ↔ server)",
+          "03-wire-protocol.md ## Idempotency",
+          "02-daemon.md ## Host identity",
+          "02-daemon.md ## Agent backends",
+          "02-daemon.md ## Permission mode",
+          "02-daemon.md ## Optional components (large models)",
+          "02-daemon.md ## Model catalogue",
+          "04-chats-and-folders.md ## Chat model",
+          "04-chats-and-folders.md ## Spawn",
+          "10-auth.md ## Backend credentials",
+          "12-error-and-offline.md ### Replay vs history cursors — boundary semantics (read before mixing them)",
+          "18-tech-stack.md ## Wire protocol package (`packages/wire`)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TA1",
+    "name": "Testing A1 (wire contract)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "A2",
+    "name": "Daemon distributable — artifact, installer, OS service, first run",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [],
+    "tasks": [
+      {
+        "task": "The daemon stops being a container and becomes something a person installs on a machine that has nothing on it but an operating system.\n\nProduce an installable artifact per operating system and architecture — macOS arm64 and x64, Linux x64 and arm64 — carrying the bundled daemon, a pinned runtime, the platform's prebuilt native addon for voice-activity detection, the voice-activity model itself (so end-of-utterance detection and barge-in work on every host with no optional download), and an install step. It must install and run on a bare machine with no toolchain, no source build and no package-manager prerequisites. It is signed with the project's own signing identity, and that signature is what the self-update path verifies an incoming build against. Notarisation is deliberately out of scope: the artifact is verified to the signature level only, and nothing in the build may block on an Apple Developer account. The artifact reports its own version, because that version drives both the stale-host indicator and self-update.\n\nThe daemon runs as the user who owns the machine, under that user's account and home directory, with that user's full access — the whole filesystem, every installed tool, services on loopback, the machine's package manager and service managers. Its lifecycle belongs to the operating system's service manager (launchd on macOS, a systemd user unit on Linux) with restart-on-failure and start-at-boot, so it runs through logout, through surface disconnects, and through any application on the same machine closing. It is deliberately a native process, not a container, and it dials out to the server so a machine behind NAT with no public address, open port or DNS entry works as a host.\n\nTwo install routes must work: a single shell command piped from the server on any machine with a shell, and an install command a surface can hand the user for another machine.\n\nFirst run is self-contained and ordered: state plainly and exactly once what the daemon will be able to do on this machine — that a turn carries this user's full authority, including elevated commands where this user has them — before it registers; register the service; provision an agent backend; then print a pairing code and a QR and wait for the user to pair it from an already-linked surface. Re-running the installer on a machine that is already registered reuses its stored credential rather than creating a second host; a machine that has been revoked pairs again from scratch.\n\nThe daemon's local control socket sits at a fixed path under the daemon user's own patch directory, owner-only, so a shared machine with two users running two daemons gets two distinct sockets rather than a collision, and the local command line finds it without any port-discovery file.\n\nAgent backends, model weights and any language runtime a component needs stay outside the artifact and are provisioned on the host afterwards, so an install never carries multi-gigabyte weights ahead of any use of voice.\n\nUnhappy paths: a failed install says what failed and leaves the machine in a state the user can retry from; an artifact for the wrong platform refuses rather than half-installing; a first run that cannot register the service must not quietly run in the foreground and claim success; a pairing that never completes leaves the service installed and waiting rather than exiting; a build whose signing identity is unavailable fails the build rather than publishing an unsigned artifact.",
+        "spec_sections": [
+          "02-daemon.md ## Runtime and installation",
+          "02-daemon.md ### Installation",
+          "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+          "11-deployment.md # Deployment and installation",
+          "11-deployment.md ## Daemon installation",
+          "18-tech-stack.md ## Runtime / packaging",
+          "18-tech-stack.md ### Two shipping shapes",
+          "10-auth.md ## Daemon registration (adding a host)",
+          "10-auth.md ### The authority of a turn",
+          "00-overview.md ## Component map"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TA2",
+    "name": "Testing A2 (daemon distributable)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "A3",
+    "name": "Trigger ingress under the authority of a turn",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [],
+    "tasks": [
+      {
+        "task": "A turn now carries the host user's full authority on a real machine, including elevated commands where that user has them. Every path by which something outside patch can cause a turn to run is therefore an entry point to that authority, and each one must be authenticated or secret-gated before anything is dispatched anywhere. This group audits every such path and closes whatever it finds open.\n\nThe paths are: inbound generic webhooks, Calendar pushes, Todoist pushes, the messaging-bot endpoint, and the server's own scheduler. For each, establish and prove what the gate is and that nothing passes it.\n\n- A webhook URL is gated by the unguessable server-issued job id it carries, plus the trigger's own signature scheme where the source supports one — no scheme, generic keyed hash, and the two named vendor schemes. Verification happens before any chat is spawned or messaged, comparisons are timing-safe, and both accepted and rejected hits are recorded in that job's inbound log so the firehose is auditable either way. A rejected signature never reaches a filter, an action or a host.\n- The bot endpoint accepts inbound messages only from the one configured sender and silently drops everything else at the endpoint, leaving no trace in any thread — an unknown sender must not be able to put text in front of the agent, and must not be able to learn that it failed.\n- The scheduler is server-internal, so its entry point is job creation and editing, which is authenticated: the HTTP surface by the caller's own credential, and the agent-facing job tools by the calling host's own key.\n- Untrusted callers are rate-limited, and the payload filter stays declarative with no code-execution surface.\n- Missing credentials for any channel the configuration references abort server startup with the offending configuration key named, rather than starting in a state where a channel silently never fires.\n\nThe one-time statement the installer makes about what the daemon will be able to do on its machine belongs to the daemon-distributable work, not here; this group covers ingress only, and must not duplicate it.\n\nUnhappy paths: a bad signature is dropped, logged as rejected and never dispatched; a hit for an unknown, deleted or disabled job is refused rather than dispatched; a filter that throws is recorded as a filter error rather than firing the action; a payload too large or malformed to parse is refused at the boundary; a replayed signed payload is not silently re-run without that being visible in the log.",
+        "spec_sections": [
+          "10-auth.md ### The authority of a turn",
+          "10-auth.md ## Tokens on the wire",
+          "10-auth.md ## What's trusted vs untrusted",
+          "08-triggers-and-jobs.md ### Webhook",
+          "08-triggers-and-jobs.md ## Execution model",
+          "08-triggers-and-jobs.md ## Logs",
+          "08-triggers-and-jobs.md ## Filter",
+          "06-threads-manager-telegram-speakers.md ## Telegram thread",
+          "09-notifications.md ## Channel credentials — fail at startup",
+          "01-server.md ## Endpoints"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TA3",
+    "name": "Testing A3 (trigger ingress authority)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A3"],
+    "tasks": ["test-runner", "security-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "B1",
+    "name": "Server — many hosts, and the two-daemon test harness",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "A2"],
+    "tasks": [
+      {
+        "task": "The server assumes exactly one daemon today, holding a single socket and closing the older one when a second attaches. It must become a relay for any number of peer host machines, while surfaces and the existing single-host install keep working throughout.\n\nThe registry holds a record per host — host id, host name, platform, architecture, versions and last-seen state — instead of a single daemon key. Any number of hosts may be registered and they are peers. Each host registers through the existing QR flow, and the same nonce is usable as a short typed code for a machine where scanning is not possible. An installer re-run on an already-registered machine reuses its record rather than creating a duplicate.\n\nEvery host holds its own outbound connection and the server keeps them all attached at once; a reconnect from a given host replaces only that host's socket and never another's. Presence is tracked and reported per host. The greeting a surface receives on connect carries the current state of every registered host plus each host's last self-description and last per-backend account report, so a surface that connects after a host dropped shows that host as offline immediately rather than looking connected.\n\nThe server records which host each chat belongs to at spawn and routes that chat's events to that host alone. The HTTP surface becomes host-aware with it: the chat list and each chat record name their host, chat creation carries the host alongside the folder and model, the model catalogue and the skill list are asked of a named host and round-tripped to that host's daemon, and host-link liveness answers either for one named host or as a per-host list that is healthy while any host is up.\n\nEverything the server buffers for a detached host — surface input, webhook and scheduler payloads — is keyed per host and flushed when that host reconnects, with the existing caps, ordering and drop-oldest behaviour preserved within each host's own queue. A backlog building for one machine never touches another.\n\nA rename from a surface updates the registry and fans out. Revoking a host invalidates that host's credential, drops its socket, and leaves its chats visible and readable but unreachable with their history retained; other hosts continue exactly as they were, and the caller is told how many chats live on the host being removed.\n\nThe spec states this directly now, so implement it rather than deciding it, because two surfaces of the system describe it differently: a SPAWN naming an offline host is refused up front with the host named, while a MESSAGE into an existing chat on an offline host is accepted, held in that host's queue and delivered on reconnect. Both behaviours must be implemented that way everywhere for a spawn dispatched now, and nothing may quietly do the other. A job action fired at an offline host is a separate path: the scheduler queues the action and issues the spawn on flush, once the host is back (08-triggers-and-jobs.md, 12-error-and-offline.md § Cron fires while a host is down).\n\nUnhappy paths: a frame for an unknown host; a chat whose host has been removed; a second socket claiming an already-connected host; a rename or setting aimed at a host that does not exist. Each fails loudly naming what it could not find, and never falls through to whichever host happens to be attached.",
+        "spec_sections": [
+          "01-server.md ## Responsibilities",
+          "01-server.md ## Endpoints",
+          "01-server.md ## Stack",
+          "03-wire-protocol.md ### Host events",
+          "03-wire-protocol.md ### Control (anywhere ↔ server)",
+          "04-chats-and-folders.md ## Chat model",
+          "04-chats-and-folders.md ## Spawn",
+          "10-auth.md ## Daemon registration (adding a host)",
+          "10-auth.md ## Revocation",
+          "12-error-and-offline.md ### Host → server disconnect",
+          "12-error-and-offline.md ### Hosts fail independently",
+          "12-error-and-offline.md ### Guaranteed input delivery (surface → daemon)",
+          "12-error-and-offline.md ### Webhook arrives while a host is down",
+          "00-overview.md ## Component map"
+        ]
+      },
+      {
+        "task": "Every multi-host claim in this change is only provable with more than one host attached, so the test rig must be able to run one server with two hosts before any group that depends on it is tested. This is testing infrastructure and it is deliberately built here, early, rather than at the end.\n\nProvide a harness that boots the real production-shaped stack: the server from its compose stack, and each daemon as a genuinely built daemon process on the test machine, matching how it runs in production. No mocked daemon, no mocked server, no fake link. Two distinct hosts register against one account, each with its own host identity and credential, its own home and patch directory, its own control socket, its own project folders and its own service registration, and both dial the one server.\n\nWhat the harness must let a test do: address a named host explicitly; assert which host actually ran a turn; take one host down and bring it back independently of the other; read each host's presence separately; inspect each host's own pending queue; and drive a surface, the command line and the agent-facing tools against a chosen host. It must be reusable — the server, daemon, jobs, command-line, web and mobile suites all drive this one rig rather than each inventing their own second host.\n\nThe harness fails loudly if the second host cannot be brought up. Silently degrading to a single host and passing is the exact failure this exists to prevent, and a run that cannot start both hosts is a failed run.\n\nShip the smoke that proves the point with it: a chat spawned on the first host runs there and produces no work on the second; a chat routed to the wrong host is caught rather than absorbed; and a message sent while one host is down is delivered on that host's reconnect while the other host's chats stay usable throughout.",
+        "spec_sections": [
+          "18-tech-stack.md ## Testing",
+          "11-deployment.md ## Topology",
+          "12-error-and-offline.md ### Hosts fail independently",
+          "01-server.md ## Responsibilities",
+          "02-daemon.md ## Runtime and installation"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TB1",
+    "name": "Testing B1 (server multi-host + two-daemon harness)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "B2",
+    "name": "Server — daemon build distribution and version compatibility",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "A2"],
+    "tasks": [
+      {
+        "task": "The server becomes the place hosts get their daemon from.\n\nIt serves the current daemon artifact for each operating system and architecture together with a version manifest describing what the current build is. That single channel feeds two things: the one-line install command a surface offers for a new machine, and the update every already-installed host checks for on boot and on a schedule.\n\nThe server also states the range of daemon versions it supports. A host reporting a version outside that range is shown as needing an update, so a protocol mismatch reads as a stale host rather than as unexplained misbehaviour. Server and daemon versions are otherwise independent, and the wire protocol is the compatibility contract between them.\n\nUnhappy paths: a request for an artifact that does not exist for the asked-for platform is a clear error, never a download of a different platform's build; a manifest that cannot be read is reported as unknown rather than as up to date; a partially published artifact is not offered as installable; an artifact whose signature does not verify against the project's signing identity is not offered.",
+        "spec_sections": [
+          "01-server.md ## Responsibilities",
+          "01-server.md ## Endpoints",
+          "02-daemon.md ### Installation",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Deploy guide",
+          "11-deployment.md ## Version reporting",
+          "18-tech-stack.md ## Deployment"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TB2",
+    "name": "Testing B2 (daemon build distribution)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C1",
+    "name": "Daemon — host identity, native-host runtime, per-host folders",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1"],
+    "tasks": [
+      {
+        "task": "Each daemon must know and publish what host it is, and stop behaving as though it lives in a container.\n\nIt has a stable host id issued at registration and a host name defaulted from the machine's hostname and editable from any surface. It reports its self-description on connect and again whenever any part of it changes: name, platform, architecture, its own version, the backends it has provisioned and their versions, whether an update is available, its default permission mode, and its optional components.\n\nIt publishes its folder registry and recent-folder list as THIS host's, so two hosts that happen to share a path string stay two distinct entries everywhere downstream. The existing rules are unchanged and simply become per host: user-designated project roots, the recent list seeded from real project folders with the shared junk filter applied, root-confined browsing that refuses traversal outside the roots, and the single-read, concurrent-symlink-resolution, short-cache performance behaviour that keeps a listing feeling instant.\n\nBecause the daemon now runs as the machine's own user, everything that worked around containerisation goes. Shell sessions it opens inherit the user's own version-control identity and keys, so cloning a private repository authenticates exactly as it would from that user's terminal, with terminal credential prompting disabled so a session with no attached terminal fails immediately rather than hanging. The daemon reads the user's own agent configuration — their skills, plugins, tool servers, settings and guidance files — from their home directory, so a chat behaves the way that agent behaves in their terminal. The elevated-privilege declaration the container needed is gone, and nothing may reintroduce it. The remaining terminal-session rules stand unchanged: long-lived shell per session, raw input and output, a separate interrupt signal, the idle and restart lifecycle, the concurrency cap and the output rate cap, and no pseudo-terminal.\n\nUnhappy paths: a rename to an empty name is refused; a part of the self-description that cannot be read — an unresolvable backend version, say — is reported as unknown rather than invented; a folder that does not exist on this host still fails loudly at spawn time even when the same path exists on another host; a shell requested for a missing folder is an error rather than a shell started somewhere else.",
+        "spec_sections": [
+          "02-daemon.md ## Host identity",
+          "02-daemon.md ## Runtime and installation",
+          "02-daemon.md ## Stack",
+          "02-daemon.md ## Terminal sessions",
+          "02-daemon.md ## Responsibilities",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "04-chats-and-folders.md ### Browsing (directory listing)",
+          "03-wire-protocol.md ### Host events"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC1",
+    "name": "Testing C1 (daemon host identity)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C2",
+    "name": "Daemon — agent backends, per-host credentials, model catalogue",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "C1"],
+    "tasks": [
+      {
+        "task": "The daemon stops being wired directly to one agent and gains a backend concept.\n\nA backend supplies four things: the models it can run, the credential those models authenticate with, the permission modes it accepts, and the transcript store it persists sessions to. A chat's chosen model selects the backend that runs it, and the daemon reports the backends a host has provisioned. The backend that exists is driven in-process against the host's OWN installation rather than a bundled copy, so a turn runs on the same binary, version and configuration the user gets in their terminal.\n\nThe daemon provisions a backend the host lacks rather than reporting it as missing. Present and usable: it resolves and reports the executable's path and version. Absent: it installs it through that backend's own installer, reporting progress to surfaces on the same channel optional components use. Present but logged out: it reports itself unauthenticated, naming the backend, and settings offers that backend's routes to a credential. A failed install is reported and turns for that backend are held until it is resolved. Backends are independent — a host with one backend unprovisioned keeps running chats on the others.\n\nBackend credentials are per host and live on the machine that runs the turns. Each host reports an account state per backend, and connect, switch and disconnect act on one backend on one host. The existing credential rules stand: the daemon's own store becomes authoritative after first boot, seeded once from the environment, the backend's credentials file, and the platform keystore in that order; disconnect empties that store without deleting it and without touching the backend's own credential; connect either takes a pasted token or re-adopts whatever the backend already has on that host; a raw model API key is never held by any surface and is stripped from the environment a turn runs in.\n\nThe model catalogue is read from each provisioned backend's provider rather than hard-coded, cached per backend on the existing lifetime, and each entry names the backend serving it, newest first. A missing or expired credential or a bad response from one provider is returned as an error against THAT backend while the models from backends that answered stay selectable. A catalogue already read is served for its lifetime even when a later refresh fails, and no baked-in or invented list is ever returned.\n\nUnhappy paths: a chat whose model belongs to a backend this host has not provisioned cannot run and says exactly that; a credential operation aimed at a backend the host does not have is refused; a credential operation aimed at an offline host is refused up front naming that host rather than buffered to take effect minutes later; an install that fails does not leave the host looking provisioned.",
+        "spec_sections": [
+          "02-daemon.md ## Agent backends",
+          "02-daemon.md ## Model catalogue",
+          "02-daemon.md ## Stack",
+          "10-auth.md ## Identity layers",
+          "10-auth.md ## Backend credentials",
+          "18-tech-stack.md ## Daemon",
+          "principles.md ## What we don't do"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC2",
+    "name": "Testing C2 (agent backends)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C3",
+    "name": "Daemon — permission mode as a two-scope setting",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "C2"],
+    "tasks": [
+      {
+        "task": "Turns still run without prompting by default, but the mode becomes a setting the user controls at two scopes rather than a constant.\n\nThe effective mode for a turn resolves in order: the chat's own override, then the host's default, then no prompting. Both scopes are set from any surface — the host default through a host-directed frame, the per-chat override through the chat's own settings frame, where omitting the mode CLEARS the override rather than leaving it as it was. The modes offered are exactly the ones the chat's backend accepts. A change takes effect on the next turn and never mid-turn.\n\nThe daemon carries the effective mode on chat state so a surface can show what the next turn will use and which scope that value came from, and reports the host default as part of its self-description along with how many of that host's chats carry their own override.\n\nThe default stays no-prompting for a reason that must survive this change: surfaces are remote and frequently asleep, so a prompt raised overnight would wait until somebody happened to look, stalling the triggers, jobs and self-wakes that run unattended. Patch adds no permission layer of its own — this only chooses which of the backend's own modes a turn runs in.\n\nUnhappy paths: a mode the chat's backend does not accept is refused with the accepted set named; clearing a chat override returns that chat to its host's default rather than to a hardcoded value; a change made while a turn is running applies to the next turn and the surface is told so; a mode set on a host that is offline is refused up front rather than appearing to work.",
+        "spec_sections": [
+          "00-overview.md ## Permission model",
+          "02-daemon.md ## Permission mode",
+          "02-daemon.md ## Responsibilities",
+          "03-wire-protocol.md ### Host events",
+          "03-wire-protocol.md ### Surface events (surface → server → daemon)",
+          "principles.md ## What we don't do"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC3",
+    "name": "Testing C3 (permission mode)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C3"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C4",
+    "name": "Daemon — optional components and per-host voice capability",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "C1"],
+    "tasks": [
+      {
+        "task": "The large voice models stop shipping with anything and become per-host downloads driven from the app.\n\nEach host advertises the optional components it could have, each with a human label, its size, and its state: not installed, downloading, installed, or failed. A surface can start an install or remove an installed one. Download progress streams live to every connected surface, so a download started on a phone is visible on the desktop, and the settled result lands on the host's self-description.\n\nAn interrupted download resumes rather than restarting, and a component counts as installed only once its size and digest verify. Whatever language runtime or environment a component needs is provisioned by the daemon at that point rather than at install time, into a host-local components directory the daemon resolves for itself — no configured model paths.\n\nVoice becomes a per-host capability. The voice-activity model ships inside the daemon artifact, so end-of-utterance detection and barge-in work on every host with nothing to download. Speech synthesis runs on a host that has its model installed. A host configured for a remote speech-to-text backend installs nothing for it. Pressing the microphone on a host whose voice components are missing asks once, in a single prompt naming the size and the host, and on acceptance starts that same download with progress shown in place; declining cancels the action rather than proceeding silently. A surface disables any affordance whose component is missing and names both the host and what is needed.\n\nUnhappy paths: a failed download reports its error and stays failed until retried, never reverting silently to not-installed; a digest that does not verify does not count as installed; removing a component a live voice session is using is refused with a reason; an install or remove naming an unknown component is an error; a host with no room for the download says so before starting.",
+        "spec_sections": [
+          "02-daemon.md ## Optional components (large models)",
+          "07-voice-app.md ### Production backends",
+          "03-wire-protocol.md ### Host events",
+          "18-tech-stack.md ## Daemon",
+          "11-deployment.md ## Host sizing",
+          "11-deployment.md ## Env"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC4",
+    "name": "Testing C4 (optional components)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C4"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "C5",
+    "name": "Daemon — self-update under the service manager",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A2", "B2", "C1"],
+    "tasks": [
+      {
+        "task": "A daemon keeps itself current without anyone logging into the machine.\n\nIt checks the server for a newer build when it boots and again on a schedule, downloads it, verifies it against the project's signing identity, and restarts itself under the operating system's service manager. A surface can also ask a host to apply an available update immediately, and a host behind the current version is reported as behind so a surface can offer that control.\n\nThe version a host reports drives both the update indicator and the server's supported-range check, so it must be accurate for the build actually running, not for the build that was downloaded.\n\nUnhappy paths, all of which must end with a working daemon on the machine and a visible failure: the server is unreachable; the downloaded artifact fails signature or digest verification; the service manager refuses the restart; the new version starts and immediately fails. In each case the previously running version stays in place and the failure is reported to surfaces rather than leaving the host silently stale or, worse, with nothing running.",
+        "spec_sections": [
+          "02-daemon.md ### Installation",
+          "02-daemon.md ## Self-upgrade",
+          "02-daemon.md ## Host identity",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Deploy guide"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TC5",
+    "name": "Testing C5 (daemon self-update)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C5"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "D1",
+    "name": "Jobs and triggers addressed to a host",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "A3", "B1"],
+    "tasks": [
+      {
+        "task": "A job now says which machine its work happens on.\n\nA folder-addressed action — spawning a fresh chat, or ensuring one exists — carries the host as part of its address and stores it with the job, so the job always fires on the machine it was written for. An action that messages an existing chat takes its host from that chat. The default folder for a spawn is the patch root on the account's home host. Everything else about triggers is unchanged: server-side firing for schedule, webhook, calendar and task-manager triggers; stored filters evaluated at fire time with no model call; spawned chats defaulting to archived; a persistent chat reused across fires; the run and inbound logs.\n\nFiring at a host that is offline writes the action to that host's own pending queue and flushes it when that host reconnects, under the same bounds as today, so a backlog building on one machine never touches another. The run log names the host and shows such a run as pending rather than as delivered or as lost.\n\nThe agent-facing job tools and the schedules editor must both let the host be chosen when the action is folder-addressed, must show the host on existing jobs, and must offer the skills discoverable in that folder ON THAT HOST rather than on some other machine.\n\nUnhappy paths: a job naming a host that has been removed reports that plainly instead of firing somewhere else; a folder-addressed job created without a host is rejected at creation rather than at fire time; a message-action job whose chat's host is gone reports which host it needed; a host offline through many firings produces a bounded backlog on that host alone, oldest dropped with a log line.",
+        "spec_sections": [
+          "08-triggers-and-jobs.md ## Action",
+          "08-triggers-and-jobs.md ## Execution model",
+          "08-triggers-and-jobs.md ## Logs",
+          "08-triggers-and-jobs.md ## CRUD",
+          "12-error-and-offline.md ### Cron fires while a host is down",
+          "12-error-and-offline.md ### Webhook arrives while a host is down",
+          "06-threads-manager-telegram-speakers.md ## Cross-chat toolset",
+          "14-design-web.md ## Schedules view",
+          "18-tech-stack.md ## Storage"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TD1",
+    "name": "Testing D1 (jobs per host)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["D1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "D2",
+    "name": "Cross-host addressing — relay through the server, cross-chat tools across machines",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "C1"],
+    "tasks": [
+      {
+        "task": "A cross-chat tool call may name a chat on a different machine from the one the calling agent is running on, and the system must carry it there and bring the answer back inside the calling turn. Nobody owns this today: same-host execution is all that exists.\n\nTwo paths, one behaviour:\n\n- When the target is on the calling chat's own host, the call is short-circuited in-process exactly as it is today.\n- When the target is on another host, the call travels over the wire and the SERVER relays it to the owning host's daemon, with the response relayed back to the caller. The server resolves a target chat to its host from its own chat-to-host record; a call naming a chat it does not know is an error naming the chat rather than a silent no-op.\n\nSurfaces see the call either way, so cross-chat activity renders as an audit trail regardless of which machine answered.\n\nA call naming an OFFLINE host returns an error to the calling agent, naming the host, WITHIN the turn. It does not buffer the way a user's message into a chat does. The distinction is deliberate and must be implemented as such: a tool result is part of a turn already in progress and the agent is waiting on it, so it has to resolve one way or the other and let the agent decide what to do about the machine being down.\n\nCreating a chat from a tool call takes a host alongside the folder, and the host is required — a folder path means nothing without the machine it is on. The other tools address by chat id and resolve the host from it. The chat listing reports each chat's host so a folder path is never ambiguous between two machines, and the device listing is scoped to the calling chat's own host. Every chat keeps the same full tool surface as today; nothing is scoped by chat type.\n\nUnhappy paths: a target host that is unregistered or has been removed; a target host that is offline, which errors in the turn naming the host; a relay whose response never arrives, which resolves as an error rather than hanging the turn open; a target chat id that does not exist anywhere.",
+        "spec_sections": [
+          "03-wire-protocol.md ### Cross-chat tools",
+          "01-server.md ## Responsibilities",
+          "02-daemon.md ## Responsibilities",
+          "06-threads-manager-telegram-speakers.md ## Cross-chat toolset",
+          "06-threads-manager-telegram-speakers.md ### Disambiguation: `Task` vs `patch_spawn` vs `patch_send_to`",
+          "12-error-and-offline.md ### Hosts fail independently",
+          "principles.md ## Non-interference"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TD2",
+    "name": "Testing D2 (cross-host relay)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["D2"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "D3",
+    "name": "The home host and the special threads",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["B1", "C1", "D2"],
+    "tasks": [
+      {
+        "task": "The three singleton threads — the manager, the messaging-bot mirror and the speakers transcript — live on exactly one nominated machine, and which machine that is must be settable. Nobody owns changing it today.\n\nThe account has one home host. It is set when the first host registers. It is changed from any surface's settings, through a dedicated frame naming the new host; exactly one host carries the marker, and setting it on another moves it. Changing it creates the three thread folders and their empty, user-owned guidance files on the new machine, and leaves the previous machine's transcripts readable where they are — nothing is migrated or deleted. The threads cannot exist on two hosts at once.\n\nThe thread folders keep their existing location under that daemon's startup working directory, so a thread still inherits the guidance and skills found on the path above it, and the daemon's working directory stays non-configurable. The broadcast sidecars the channel-mediating threads read on a user reply live on the home host beside those folders, and inbound bot messages and speaker notifications route to that host's daemon.\n\nA job action that names no folder defaults to the patch root on the home host.\n\nWhile the home host is offline the three threads are unavailable and every surface says so plainly, rather than showing them as ordinary idle chats with a composer that appears to work.\n\nUnhappy paths: changing the home host to one that is offline or unregistered is refused, naming it; removing the host that currently IS the home host must not silently leave the account without one — the removal names that consequence and the account ends the operation with a home host or the removal is refused, and whichever rule is chosen must hold identically on every surface and in the command line; a second host must not be able to create the thread folders; a home-host change while a thread is mid-turn must not lose that turn's transcript.",
+        "spec_sections": [
+          "06-threads-manager-telegram-speakers.md ## Where special threads run",
+          "06-threads-manager-telegram-speakers.md ## What they share",
+          "06-threads-manager-telegram-speakers.md ## Cross-chat toolset",
+          "03-wire-protocol.md ### Host events",
+          "09-notifications.md ## Broadcast context",
+          "09-notifications.md ### `speakers`",
+          "12-error-and-offline.md ### Hosts fail independently",
+          "08-triggers-and-jobs.md ## Action",
+          "14-design-web.md ### `/settings` details"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TD3",
+    "name": "Testing D3 (home host and special threads)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["D3"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "E1",
+    "name": "Web — Settings → Hosts",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "C1", "C2", "C3", "C4", "C5", "D3"],
+    "tasks": [
+      {
+        "task": "Settings gains the place where machines are added, watched and managed, replacing today's single-daemon section.\n\nThe section lists one row per host machine. A row shows the host name, editable inline; online or offline with the last heartbeat, shown exactly once; the platform; the daemon's version with an update control when one is available; and the host's agent backends, each with its version and account, or that backend's connect and switch controls when there is no usable credential. Expanding a row reveals that host's default permission mode chosen from the modes its backends accept, stating how many of the host's chats carry their own override; its optional components, each with size, state, an install or remove control and live progress while downloading; its project folders; a control marking this host as the account's home host, where the three special threads run, with exactly one host carrying it and setting it elsewhere moving the threads; and a remove-host action confirmed with the number of chats that live on it.\n\nAbove the list, an add-host action shows the pairing QR and a short typed code together with the one-line install command for the target operating system. On the desktop shell, a machine with no daemon of its own additionally offers to run one on this Mac.\n\nAny control that needs a live link to a host refuses up front and names the offline host, rather than appearing to work and taking effect minutes later when a buffered frame lands. A control in flight shows a pending state with itself disabled and only ever claims a state the host has actually reported; a report that does not arrive within the existing timeout leaves the row on its last reported state and states the failure.\n\nThe section follows the app's existing visual system throughout: no explanatory helper text anywhere, toggle switches rather than bare checkboxes with static noun labels, the shared delete and close glyphs at the shared generous size, tooltips only on icon-only controls, the app's own confirm dialogs naming the consequence rather than the browser's, and both colour palettes following the operating system with no in-app theme control.\n\nUnhappy paths: no hosts registered at all shows the app's standard empty-state pattern with the add-host action; a host whose self-description has not arrived yet shows a checking state rather than guessing at connected or not connected; a failed component download shows its error with a way to retry; a backend that reports itself unauthenticated shows that on its own row while the host's other rows carry on; setting the home host to an offline host is refused with the reason shown on the control.",
+        "spec_sections": [
+          "14-design-web.md ## Routes",
+          "14-design-web.md ### `/settings` details",
+          "14-design-web.md ## Visual system",
+          "14-design-web.md ### Copy — no helper text",
+          "14-design-web.md ### Icons",
+          "14-design-web.md ## Theming",
+          "02-daemon.md ## Host identity",
+          "02-daemon.md ## Permission mode",
+          "02-daemon.md ## Optional components (large models)",
+          "02-daemon.md ### Desktop app and the local daemon",
+          "06-threads-manager-telegram-speakers.md ## Where special threads run",
+          "10-auth.md ## Backend credentials",
+          "10-auth.md ## Daemon registration (adding a host)",
+          "10-auth.md ## Revocation"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TE1",
+    "name": "Testing E1 (web Settings → Hosts)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["E1"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "E2",
+    "name": "Web — host-aware chats, pickers, banners, editor, terminal and model choice",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "C2", "C3", "D2", "D3"],
+    "tasks": [
+      {
+        "task": "The rest of the web app learns that chats live on different machines.\n\nStarting a chat means choosing a host and a folder on it. The picker is one list grouped by host, with each host's configured project folders and recent folders under its name, so picking a folder on the always-on box and on a laptop is the same gesture. Picking a folder therefore picks the host, and that pair is what the spawn carries and what is fixed for the chat's life. It defaults to the last used host-and-folder pair; a host added later appears as soon as it registers; an offline host's group renders greyed with the host marked offline, and choosing from it reports that the host is offline rather than spawning. Everything else about the picker is unchanged: folder basenames as primary labels with full paths as muted secondary text, browsing the chosen host's own directory tree with the breadcrumb appearing only after drilling in, the clearly-secondary ad-hoc path field, the recents-row deselect toggle, the click-off and Esc dismissal rules, only one pop-up open at a time, and the rule that the browsed filesystem is always the selected host's and never the surface's own machine — including in the desktop shell, which must not use an operating-system directory dialog.\n\nThe model picker offers models from every backend that answered, newest first, with the chosen model determining which backend runs the chat; a backend that failed shows its error in the picker while the rest stay selectable, and the list is never replaced by a baked-in one.\n\nA chat shows the host it is pinned to. Offline is per host: a chat on an offline host carries a banner naming that host and saying its messages will be queued and sent on reconnect, chats on reachable hosts stay fully usable, and the banner becomes app-level only when every host is offline. The link to the server and host presence remain two separate indicators, the sidebar's connection indicator reflects that distinction rather than a single global daemon state, a chat's own indicator reflects its own host, and the no-offline-flash-on-load rule still holds. The diagnostics screen keeps its behaviour, reports one line per registered host, and links to the hosts section of settings.\n\nEverything else that touches a machine follows the chat's own host: the skill autocomplete lists the skills in that chat's folder on that host; the file browser, the diff editor and the editor save resolve on that host and stay refused while the chat is running; the terminal drawer opens a shell on that host, and on the new-chat screen on whichever host the folder picker currently has selected. Batch mode spans hosts — each member row carries its own chat's host and a member whose host is offline shows that state rather than blocking the batch or its ready count.\n\nA chat's own permission-mode override is set from the chat's tools panel, showing the effective mode the next turn will use, offering the modes the chat's backend accepts, and offering a way back to the host default that clears the override.\n\nUnhappy paths: sending to a chat whose host is offline is accepted, queued and shown as queued; spawning on an offline host is refused up front with the host named; a chat whose host has been removed stays readable and is clearly marked unreachable; voice controls, which carry ephemeral audio and cannot be queued, render disabled with the host named as the reason.",
+        "spec_sections": [
+          "14-design-web.md ## Sidebar",
+          "14-design-web.md ### Batch mode",
+          "14-design-web.md ## Main chat panel",
+          "14-design-web.md ## Tools panel",
+          "14-design-web.md ## Terminal",
+          "14-design-web.md ## Editor — two surfaces",
+          "14-design-web.md ## Offline / error states",
+          "14-design-web.md ### Copy — no helper text",
+          "04-chats-and-folders.md ## Folders (daemon-owned registry)",
+          "04-chats-and-folders.md ### Browsing (directory listing)",
+          "04-chats-and-folders.md ## Spawn",
+          "04-chats-and-folders.md ## Chat model",
+          "02-daemon.md ## Model catalogue",
+          "02-daemon.md ## Permission mode",
+          "02-daemon.md ## Terminal sessions",
+          "12-error-and-offline.md ### Host-offline UX",
+          "12-error-and-offline.md ### Hosts fail independently",
+          "12-error-and-offline.md ### Surface connection state model",
+          "12-error-and-offline.md ### Connection diagnostics screen"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TE2",
+    "name": "Testing E2 (web host-aware chat UX)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["E2"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "E3",
+    "name": "Desktop — run and manage a daemon on this Mac",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A2", "C5", "E1"],
+    "tasks": [
+      {
+        "task": "The desktop app is a surface that can also turn the machine it runs on into a host.\n\nIt offers to run a daemon on this Mac, installs it as an ordinary operating-system service with its own lifetime, shows that host's status alongside every other host, and can restart it. The daemon it installs is not owned by the app: closing the app leaves the daemon running, and the daemon starts at boot whether or not the app is ever opened.\n\nThe existing desktop packaging and runtime invariants must continue to hold unchanged — the packaged bootstrap gate that still runs when packaged, the tray template icon shipped inside the bundle, the app icon, the updater configuration being absent in local builds, the re-signing of local builds so the machine will launch them, the single main-window singleton, the imperatively driven menu-bar visibility signal that gates the heartbeat, and the readiness-gated main-to-renderer start messages. The shell keeps signing with the project's own identity, which is what makes its update path work, and notarisation stays off.\n\nUnhappy paths: an install that fails reports why and leaves nothing half-registered; the offer is not shown on a machine that already runs a daemon; the app never presents its own machine's filesystem as a folder source, even though a daemon may now be running on that same machine — folders still come from the selected host's daemon.",
+        "spec_sections": [
+          "02-daemon.md ### Desktop app and the local daemon",
+          "05-surfaces.md ### Desktop packaging (Electron)",
+          "05-surfaces.md #### Runtime invariants",
+          "05-surfaces.md ## Menu-bar (system tray) surface",
+          "11-deployment.md ## Desktop code signing",
+          "14-design-web.md ### `/settings` details",
+          "18-tech-stack.md ## Desktop shell (`packages/desktop`)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TE3",
+    "name": "Testing E3 (desktop local daemon)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["E3"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "F1",
+    "name": "Mobile — hosts at parity",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "C1", "C2", "C3", "C4", "D3", "C5"],
+    "tasks": [
+      {
+        "task": "The Android app reaches parity with web on everything host-shaped.\n\nSettings gains a hosts section: one row per machine with its name, its status shown exactly once, its daemon version and update control, and a per-host sub-screen carrying that host's default permission mode, its optional components with size, state and live progress where a download started from the phone runs on the host, its project folders, the home-host control, and remove host. Add host shows the pairing QR and short code with the install command. Backend accounts appear per host, one row per backend, with the same connect, switch and disconnect controls — switching accounts must be possible from the phone, which is the surface with no access to the machine's terminal, and the row shows a loading state until the host's first report lands rather than guessing.\n\nThe new-chat folder browser groups by host and keeps its existing rules: basenames as primary labels with paths as muted secondary text, the breadcrumb only once the user has drilled in, one-tap shortcuts for recent and published folders defaulting to the last-used host-and-folder pair, and free-text path entry only as an explicit advanced affordance. The skill autocomplete lists the skills in the chat's folder on its own host.\n\nOffline is per host: the banner names the affected host, links to the hosts section of settings, is scoped to that host's chats, and goes app-level only when every host is offline. The composer stays usable and queues; only voice note and voice call render visibly disabled with a reason that names the host. The two connection indicators stay separate, the diagnostics screen reports one line per host, and the no-offline-flash-on-load rule still holds.\n\nThe app's existing visual system holds throughout: the single spacing scale, the top safe-area inset on every screen, the display face for titles, both colour schemes with every token present, the shared empty-state pattern with at most its single plain sentence, no section subtitles or helper text, and anchored menus rather than centred dialogs.\n\nUnhappy paths: no hosts registered shows the standard empty state with the add-host action; a component download that fails shows its error with a retry; a host removed while its sub-screen is open returns to the list and says why; a control needing a live host link refuses up front naming the offline host rather than queueing.",
+        "spec_sections": [
+          "15-design-mobile.md ## Settings tab",
+          "15-design-mobile.md ## New chat flow",
+          "15-design-mobile.md ## Offline / error states",
+          "15-design-mobile.md ## Navigation shell",
+          "15-design-mobile.md ## Empty states",
+          "15-design-mobile.md ## Chat detail",
+          "10-auth.md ## Backend credentials",
+          "02-daemon.md ## Optional components (large models)",
+          "02-daemon.md ## Permission mode",
+          "02-daemon.md ## Host identity",
+          "06-threads-manager-telegram-speakers.md ## Where special threads run",
+          "12-error-and-offline.md ### Host-offline UX"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TF1",
+    "name": "Testing F1 (mobile hosts)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["F1"],
+    "tasks": ["test-runner", "design-reviewer", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "G1",
+    "name": "CLI — hosts and host addressing",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A1", "B1", "C1", "C4", "C5", "C3"],
+    "tasks": [
+      {
+        "task": "The command line gains hosts as a first-class resource and a default that matches where it is run. This spec now owns the whole command-line surface, and the terminal-design and daemon documents defer to it — where they disagree, this one wins.\n\nA hosts command family lists every registered host with its name, status, version and components; shows one host in full including its platform, backend versions, components and permission mode; renames a host; installs an optional component; applies an available daemon update; and removes a host, confirmed and naming its chat count. The install and update subcommands DO accept an explicit host and simply default to the machine the command is invoked on — they are not restricted to the local machine.\n\nTwo different flags name two different things and must never be conflated: one names the SERVER to talk to, and flips the tool into remote mode; the other names a daemon HOST to act on. The default host for any command is the machine the command is invoked on, so spawning a chat in a folder there runs there and talks to that machine's daemon over its local socket, where reaching the socket is the trust boundary. Addressing another host is explicit, accepts either a host name or a leading portion of a host id, and routes through the server instead of the local socket.\n\nThe interactive picker lists recent folders grouped by host with this host first. A non-interactive spawn validates the folder against the target host and errors loudly when it is not there, with folder completion asked of the target host so it works regardless of which machine the command line itself is on. The daemon subcommands remain for manual service control now that the installer registers the service, and the status subcommand reports the daemon's version. The diagnostics command reports per-host status and each host's pending backlog. The command line stays single-resource operations only, with structured output as the contract the agent-facing skill drives, and that skill must be updated to teach the new surface.\n\nUnhappy paths: a host value that is ambiguous or unknown is an error listing the candidates, never a guess; a local command run on a machine with no daemon says so rather than hanging; a removed host named on a later command reports that it is gone; an operation needing a live link to an offline host refuses naming it.",
+        "spec_sections": [
+          "17-cli.md ## Commands",
+          "17-cli.md ## Hosts and the CLI",
+          "17-cli.md ## Scope",
+          "17-cli.md ## Auth",
+          "17-cli.md ## Skill",
+          "13-design-terminal.md ## Invocation",
+          "13-design-terminal.md ## Subcommands",
+          "05-surfaces.md ## Terminal (`patch` CLI)",
+          "02-daemon.md ## CLI",
+          "02-daemon.md ## Control IPC (local CLI ↔ daemon)",
+          "12-error-and-offline.md ## Observability"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TG1",
+    "name": "Testing G1 (CLI hosts)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["G1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "H1",
+    "name": "Voice bound to a host",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["C4", "D3", "E2", "F1"],
+    "tasks": [
+      {
+        "task": "Voice becomes something that happens on a particular machine.\n\nA chat's voice runs on that chat's own host: a surface opens its audio session against that host's daemon, and the one-shot token it mints is bound to that session. A physical voice device pairs with one host at setup — the machine whose daemon does its speech-to-text and synthesis and which carries the voice components — and re-pairing moves it to another host. The device's audio transport, wake-word sessions, outbound ringing and device selection, echo cancellation, barge-in, mute behaviour, sample-rate handling and indicator states are otherwise unchanged.\n\nAcross the app surfaces, a voice affordance is available where its host has the components it needs and is disabled with the host and the missing component named where it does not; first use offers the download in place in a single prompt naming the size and the host. Turn-taking and barge-in work on every host because the voice-activity model ships with the daemon. A host configured for a remote speech-to-text backend needs no download for it. Synthesis runs on a host that has its model installed.\n\nA notification aimed at the speakers channel is relayed to the host the speakers are paired to — not the calling chat's host — and that host's daemon synthesises and broadcasts it, following the existing resolution order of explicit device, most-recently-active device, all devices, then falling through to push. The device listing an agent reads is scoped to its own chat's host.\n\nUnhappy paths: a voice request to an offline host is refused with the host named rather than queued, because audio is ephemeral; a device whose paired host is offline says so; a voice session that cannot start reports the reason rather than appearing to record and producing nothing; a speakers notification whose paired host is offline falls through to push rather than being lost.",
+        "spec_sections": [
+          "16-voice-device.md ## Connection model — audio relayed via daemon",
+          "16-voice-device.md ## Multiple devices",
+          "16-voice-device.md ## Outbound routing (which device to ring)",
+          "16-voice-device.md ## Two flows: notification vs conversation",
+          "07-voice-app.md ### Production backends",
+          "07-voice-app.md ## Voice-input modes — three gestures, three overlays",
+          "07-voice-app.md ## End-to-end voice transport",
+          "09-notifications.md ### `speakers`",
+          "02-daemon.md ## Optional components (large models)",
+          "03-wire-protocol.md ### Audio session (surface ↔ daemon)"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TH1",
+    "name": "Testing H1 (voice per host)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["H1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "I1",
+    "name": "Deployment split and version reporting across hosts",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["A2", "B2", "C1", "C5", "D1", "D3"],
+    "tasks": [
+      {
+        "task": "Deployment splits into a server that is deployed and a daemon that is installed.\n\nThe server's reference deployment carries the server and its reverse proxy alone. The daemon service, its mounted project directories, its container-only workarounds — the sandbox declaration that let elevated turns run as root, the mounted home directory, the shared model directory — all go. Where one machine runs both, the daemon reaches the server over loopback and the server writes its shared data as the host user so a co-located daemon can read it. The environment documentation loses the model-path variables the daemon now resolves for itself, separates the variables each host's service reads from the ones the server reads, and describes the backend credential as a first-boot seed for the daemon's own store rather than an ongoing source of truth.\n\nThe build commands gain a daemon build producing the per-platform artifacts, published to the server so one channel feeds both a new host's install and every existing host's self-update. The deploy guide must state that a server deploy completes without touching any host, that every host reconnects on its own with backoff, that chats in flight during a restart surface the drop, and that server and daemon versions are independent with the wire protocol as the compatibility contract.\n\nVersion reporting must cover the new shape: the daemon is now a per-host layer, so the report names each host's daemon version separately alongside the server, the web bundle, the desktop shell and the phone app, and drift is reported per host with a remedy. A layer or a host whose version cannot be read is reported as unknown, never as current. A delivery that leaves the deployment inconsistent fails.\n\nUnhappy paths: a deploy that cannot publish daemon artifacts fails loudly rather than leaving the previous artifacts advertised as current; a host whose version cannot be read shows unknown; a compose stack that still starts a daemon container is a failure of this task, not a leftover.",
+        "spec_sections": [
+          "11-deployment.md ## Topology",
+          "11-deployment.md ## Reference deployment — the server (Docker Compose)",
+          "11-deployment.md ## Daemon installation",
+          "11-deployment.md ## Env",
+          "11-deployment.md ## Deploy guide",
+          "11-deployment.md ## Host sizing",
+          "11-deployment.md ## Version reporting",
+          "11-deployment.md ## Backup",
+          "18-tech-stack.md ## Deployment",
+          "18-tech-stack.md ## Storage",
+          "18-tech-stack.md ### Two shipping shapes"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TI1",
+    "name": "Testing I1 (deployment split and version reporting)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["I1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "J1",
+    "name": "Spec-to-test traceability index",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [
+      "TA1",
+      "TA2",
+      "TA3",
+      "TB1",
+      "TB2",
+      "TC1",
+      "TC2",
+      "TC3",
+      "TC4",
+      "TC5",
+      "TD1",
+      "TD2",
+      "TD3",
+      "TE1",
+      "TE2",
+      "TE3",
+      "TF1",
+      "TG1",
+      "TH1",
+      "TI1"
+    ],
+    "tasks": [
+      {
+        "task": "The traceability index — the matrix mapping every spec file to the tests that cover its claims — now lives with the other engineering documentation rather than beside the spec, because it is entirely references to code and tests and dates the moment either moves. Bring it back into agreement with the system as it now stands.\n\nEvery spec file gets a row naming its key claims and the tests that cover them, with an honest status: covered, partial or manual, or deferred. The claims this change introduced must each appear against a real test — routing by host, per-host presence and buffering, the installable daemon and its self-update, agent backends and per-host credentials, the two permission-mode scopes, optional components, the cross-host relay and its in-turn error for an offline host, the home host and moving it, jobs addressed to a host, host-aware surfaces, the command line's host addressing, and voice bound to a host.\n\nExisting rows must be re-checked rather than carried forward: at least one is stale, claiming a surface has no package and no tests when that surface is built and has a substantial suite. A row that claims coverage must name tests that exist and run.\n\nThe environment-gated tests keep their own section, stating plainly which tests skip rather than fail when a live backend credential is unavailable, and why skipping is correct there. The known-gaps section states what is genuinely uncovered, including anything only a person at physical hardware can exercise.\n\nUnhappy path for this task: a row that cannot be honestly marked covered is marked partial or deferred with the reason, never marked covered to make the table look complete.",
+        "spec_sections": [
+          "18-tech-stack.md ## Testing",
+          "principles.md ## How we add it",
+          "15-design-mobile.md ## Settings tab",
+          "11-deployment.md ## Deploy guide"
+        ]
+      }
+    ]
+  },
+  {
+    "group-id": "TJ1",
+    "name": "Testing J1 (traceability index)",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": ["J1"],
+    "tasks": ["test-runner", "spec-reviewer", "general-reviewer"]
+  },
+  {
+    "group-id": "FINAL",
+    "name": "Final full-system review",
+    "complete": false,
+    "success": false,
+    "dependentOnGroups": [
+      "TA1",
+      "TA2",
+      "TA3",
+      "TB1",
+      "TB2",
+      "TC1",
+      "TC2",
+      "TC3",
+      "TC4",
+      "TC5",
+      "TD1",
+      "TD2",
+      "TD3",
+      "TE1",
+      "TE2",
+      "TE3",
+      "TF1",
+      "TG1",
+      "TH1",
+      "TI1",
+      "TJ1"
+    ],
+    "tasks": [
+      "accessibility-reviewer",
+      "performance-reviewer",
+      "security-reviewer",
+      "spec-reviewer",
+      "general-reviewer"
+    ]
+  }
+]

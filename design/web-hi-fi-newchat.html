@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — web · new chat (hi-fi v01)</title>
+<link rel="stylesheet" href="hi-fi-tokens.css">
+<style>
+  .stage {
+    width: 1280px;
+    height: 800px;
+    margin: 28px auto;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    overflow: hidden;
+  }
+
+  .sidebar { background: var(--bg-panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+  .brandbar { padding: 18px 22px 16px; display: flex; align-items: center; gap: 6px; }
+  .brand { font-family: 'Fraunces', Georgia, serif; font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 500; font-style: italic; font-size: 26px; letter-spacing: -0.02em; line-height: 1; }
+  .brandbar .conn-dot { margin-left: auto; }
+
+  .sb-list { flex: 1; overflow: hidden; }
+  .sb-section { padding: 4px 0; }
+  .sb-row { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; padding: 8px 14px; align-items: baseline; margin: 0 8px; border-radius: var(--radius); }
+  .sb-row.special .name { font-weight: 600; }
+  .sb-row .status { font-family: ui-monospace, monospace; font-size: 13px; line-height: 1; text-align: center; color: var(--ink-3); }
+  .sb-row .status.running { color: var(--running); }
+  .sb-row .status.waiting { color: var(--waiting); }
+  .sb-row .status.special { color: var(--accent); }
+  .sb-row .body { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-row .name { font-size: 13.5px; font-weight: 500; }
+  .sb-row .preview { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+  .sb-row .when { font-size: 11px; color: var(--ink-3); }
+  .sb-row.in-folder { padding-left: 28px; }
+  .folder-head { padding: 14px 22px 4px; color: var(--ink-3); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  .divider { height: 1px; background: var(--line-soft); margin: 10px 16px; }
+
+  .sb-bottom { padding: 12px 16px 18px; border-top: 1px solid var(--line-soft); }
+  .sb-link { display: flex; align-items: center; padding: 8px 12px; border-radius: var(--radius); color: var(--ink-2); font-size: 13px; }
+  .sb-link .icon { color: var(--ink-3); margin-right: 10px; font-size: 14px; }
+  .new-chat-btn { margin-top: 10px; width: 100%; padding: 12px 16px; border: none; border-radius: var(--radius); background: var(--accent); color: var(--bg-elevated); font-family: inherit; font-size: 13.5px; font-weight: 500; box-shadow: var(--shadow-sm); }
+
+  .main { display: flex; flex-direction: column; overflow: hidden; background: var(--bg-elevated); }
+  .main-head { padding: 20px 28px 16px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: baseline; gap: 12px; }
+  .folder-pill {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    border: 1px solid var(--line);
+    padding: 5px 10px;
+    background: var(--bg-panel);
+    border-radius: var(--radius);
+    color: var(--ink);
+  }
+  .folder-pill .caret { color: var(--ink-3); margin-left: 6px; }
+  .placeholder-name { color: var(--ink-faint); font-style: italic; font-family: 'Fraunces', Georgia, serif; font-size: 15px; }
+
+  .stream {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--ink-faint);
+    font-style: italic;
+    font-size: 13px;
+  }
+
+  .composer {
+    border-top: 1px solid var(--line-soft);
+    padding: 16px 28px 20px;
+    background: var(--bg-elevated);
+    display: flex; gap: 10px; align-items: flex-end;
+  }
+  .composer .input {
+    flex: 1;
+    border: 2px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    min-height: 56px;
+    color: var(--ink-3);
+    font-size: 14.5px;
+    background: var(--bg-elevated);
+    box-shadow: 0 0 0 4px var(--accent-tint);
+  }
+  .composer .input::after {
+    content: '|';
+    color: var(--ink);
+    margin-left: 1px;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .composer .icon-btn {
+    width: 48px; height: 48px;
+    border: 1px solid var(--line);
+    background: var(--bg-elevated);
+    border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    color: var(--ink-2);
+  }
+  .composer .send {
+    background: var(--accent); color: var(--bg-elevated); border-color: var(--accent);
+    font-size: 18px;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <div class="sidebar">
+    <div class="brandbar">
+      <span class="brand">patch</span>
+      <span class="conn-dot" title="daemon connected"></span>
+    </div>
+    <div class="sb-list">
+
+      <div class="sb-section">
+        <div class="sb-row special"><div class="body"><div class="name">Manager</div></div><span class="row-tools"><span class="mic-btn" title="hold to speak"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-row pinned">
+          <span class="status"><span class="badge read">✓</span></span>
+          <div class="body">
+            <div class="name">Home Assistant</div>
+            <div class="preview">porch lights off · 14:08</div>
+          </div>
+          <span class="row-tools">
+            <span class="pin-marker" title="pinned"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span>
+            <span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+          </span>
+        </div>
+      </div>
+      <div class="divider pinned-div"></div>
+
+      <div class="folder-head">bed-planner</div>
+      <div class="sb-section">
+        <div class="sb-row in-folder">
+          <span class="status"><span class="badge permission"></span></span>
+          <div class="body">
+            <div class="name">fix layout bug</div>
+            <div class="preview">edit src/layout.ts — needs your OK</div>
+          </div>
+          <span class="when">2m</span>
+          <span class="row-tools"><span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span>
+        </div>
+      </div>
+
+      <div class="folder-head">portfolio</div>
+      <div class="sb-section">
+        <div class="sb-row in-folder">
+          <span class="status"><span class="badge working"></span></span>
+          <div class="body">
+            <div class="name">deploy to vercel</div>
+            <div class="preview">running build…</div>
+          </div>
+          <span class="when">just now</span>
+          <span class="row-tools"><span class="mic-btn"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></span>
+        </div>
+      </div>
+
+      <div class="channels open">
+        <div class="ch-toggle">
+          <svg class="ch-chev" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          Channels
+        </div>
+        <div class="ch-list">
+          <div class="ch-row"><span class="ch-name">Telegram</span></div>
+          <div class="ch-row">
+            <span class="ch-name">Speakers</span>
+            <span class="ch-meta"><svg viewBox="0 0 24 24" width="11" height="11"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>kitchen</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-toggle">
+        <svg class="arch-icon" viewBox="0 0 24 24"><path d="M3 7h18v3H3zM5 10v9h14v-9M10 14h4"/></svg>
+        Archived
+      </div>
+
+    </div>
+    <div class="sb-bottom">
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>Schedules</div>
+      <div class="sb-link"><svg class="nav-icon" viewBox="0 0 24 24" style="margin-right:10px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</div>
+      <button class="new-chat-btn">+ New chat</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="main-head">
+      <span class="folder-pill">~/projects/bed-planner<span class="caret">▾</span></span>
+      <span class="placeholder-name">— unnamed</span>
+    </div>
+    <div class="stream">&nbsp;</div>
+    <div class="composer">
+      <div class="input">Type your first message…</div>
+      <span class="icon-btn">🎙</span>
+      <span class="icon-btn send">↑</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

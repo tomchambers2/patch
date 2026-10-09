@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>patch — redesign harness (snapshot source)</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      DEV-ONLY harness that mounts the REAL Sidebar + ChatRoute against
+      mock stores populated with a realistic conversation, so the running UI
+      can be serialized into a self-contained snapshot for the redesign studio.
+      Not part of the production bundle.
+    -->
+    <script type="module" src="/src/redesign-harness.tsx"></script>
+  </body>
+</html>

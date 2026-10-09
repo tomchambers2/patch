@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>patch — mobile · variants (low-fi v01)</title>
+<style>
+  :root {
+    --ink: #222;
+    --line: #aaa;
+    --muted: #888;
+    --faded: #b8b8b8;
+    --bg: #fff;
+    --fill: #f4f4f4;
+    --accent: #d8e8ff;
+    --running: #2a8f3e;
+    --waiting: #c97a00;
+    --offline: #c97a00;
+    --voice: #b73a3a;
+    --diff-add: #e3f5e3;
+    --diff-del: #fbe3e3;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 32px 0;
+    background: #d4d4d4;
+    color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  .deck {
+    display: grid;
+    grid-template-columns: repeat(2, 412px);
+    gap: 36px 28px;
+    justify-content: center;
+    padding-bottom: 60px;
+  }
+  .frame-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .label {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #444;
+    padding: 0 4px;
+  }
+  .label .num { background: var(--ink); color: var(--bg); padding: 2px 8px; margin-right: 8px; }
+  .label .desc { text-transform: none; letter-spacing: 0; font-family: -apple-system, system-ui, sans-serif; color: var(--ink); font-size: 13px; }
+
+  .phone-frame {
+    width: 412px;
+    height: 850px;
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    border-radius: 28px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .status-bar {
+    height: 32px;
+    padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  /* offline banner */
+  .offline-banner {
+    background: var(--offline);
+    color: var(--bg);
+    padding: 6px 14px;
+    font-size: 12px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .row { padding: 10px 18px; display: grid; grid-template-columns: 16px 1fr auto; gap: 12px; align-items: baseline; border-bottom: 1px solid var(--fill); }
+  .row.special { padding: 12px 18px; }
+  .row.special .name { font-weight: 600; }
+  .row.in-folder { padding-left: 38px; }
+  .row .status { font-family: ui-monospace, monospace; font-size: 14px; line-height: 1; text-align: center; }
+  .row .status.running { color: var(--running); }
+  .row .status.waiting { color: var(--waiting); }
+  .row .status.idle { color: var(--muted); }
+  .row .status.read { color: var(--faded); }
+  .row .status.special { color: var(--muted); }
+  .row .body { min-width: 0; overflow: hidden; }
+  .row .name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .preview { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .row .when { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  .folder-head {
+    padding: 10px 18px 4px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-family: ui-monospace, monospace;
+  }
+
+  .tab-bar {
+    height: 60px;
+    border-top: 1px solid var(--line);
+    background: var(--fill);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    flex-shrink: 0;
+    padding-bottom: 4px;
+  }
+  .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--muted); font-size: 10px; }
+  .tab .icon { font-size: 18px; line-height: 1; }
+  .tab.active { color: var(--ink); font-weight: 600; }
+
+  .screen-head {
+    padding: 4px 18px 10px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .screen-head .title { font-size: 20px; font-weight: 600; }
+  .screen-head .right { margin-left: auto; }
+
+  .nav-bar {
+    padding: 6px 12px 10px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .nav-bar .back { font-size: 22px; color: var(--ink); width: 22px; }
+  .nav-bar .title { flex: 1; min-width: 0; overflow: hidden; }
+  .nav-bar .title .folder { color: var(--muted); font-size: 10px; font-family: ui-monospace, monospace; line-height: 1.2; }
+  .nav-bar .title .name { font-weight: 600; font-size: 15px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* fab */
+  .fab {
+    position: absolute;
+    right: 16px; bottom: 76px;
+    width: 52px; height: 52px;
+    border: 2px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 300;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+
+  /* empty hero */
+  .empty-hero {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .empty-hero .card { text-align: center; max-width: 320px; }
+  .empty-hero h2 { margin: 0 0 8px; font-size: 18px; }
+  .empty-hero p { margin: 4px 0; font-size: 13px; color: var(--muted); }
+  .empty-hero .ctrl-primary {
+    display: inline-block;
+    background: var(--ink); color: var(--bg);
+    padding: 10px 20px;
+    margin-top: 14px;
+    font-size: 13px;
+  }
+  .empty-hero .checklist {
+    text-align: left; margin-top: 18px; padding: 10px 12px;
+    background: var(--fill); border: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .empty-hero .checklist h3 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+  .empty-hero .checklist .item { display: flex; gap: 8px; padding: 3px 0; }
+  .empty-hero .checklist .check { color: var(--running); font-family: ui-monospace, monospace; width: 14px; }
+  .empty-hero .checklist .check.todo { color: var(--muted); }
+  .empty-hero .checklist .item.todo { color: var(--muted); }
+
+  /* chat detail (offline + bash) */
+  .stream {
+    flex: 1; overflow: hidden; padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg { font-size: 14px; line-height: 1.45; }
+  .msg.user {
+    background: var(--accent);
+    padding: 10px 12px;
+    border-radius: 14px 14px 4px 14px;
+    align-self: flex-end;
+    max-width: 80%;
+    margin-left: 20%;
+  }
+  .msg.assistant { color: var(--ink); padding: 0 4px; }
+
+  .perm-card {
+    border: 1px solid var(--ink);
+    background: var(--fill);
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .perm-card .head { font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 6px; }
+  .perm-card .body-block {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    padding: 6px 8px;
+    margin-bottom: 10px;
+    line-height: 1.4;
+    overflow-x: auto;
+  }
+  .perm-card .body-block.bash { color: var(--ink); }
+  .perm-card .question { font-weight: 600; margin-bottom: 8px; font-size: 13px; }
+  .perm-card .opts { display: flex; flex-direction: column; gap: 4px; }
+  .perm-card .opt {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    padding: 8px 10px;
+    font-size: 13px;
+    display: flex; gap: 10px; align-items: baseline;
+  }
+  .perm-card .opt .num { color: var(--muted); font-family: ui-monospace, monospace; min-width: 14px; }
+  .perm-card .opt.yes { border-color: var(--ink); }
+  .perm-card .opt.no { color: var(--muted); }
+  .perm-card .opt .esc-hint { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+  .composer {
+    border-top: 1px solid var(--line);
+    padding: 10px 12px 14px;
+    display: flex; gap: 8px; align-items: flex-end;
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  .composer .input {
+    flex: 1;
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+    min-height: 40px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .composer.disabled .input { background: var(--fill); color: var(--faded); }
+  .composer .icon-btn {
+    width: 40px; height: 40px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .composer .icon-btn.send { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .composer.disabled .icon-btn { color: var(--faded); }
+  .composer.disabled .icon-btn.send { background: var(--faded); border-color: var(--faded); color: var(--bg); }
+
+  /* per-chat offline banner */
+  .chat-banner {
+    background: #fff8e9;
+    border-bottom: 1px solid var(--offline);
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--offline);
+    flex-shrink: 0;
+  }
+
+  /* archive screen */
+  .arch-search {
+    margin: 8px 18px;
+    border: 1px solid var(--line);
+    background: var(--fill);
+    padding: 8px 12px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .arch-list { flex: 1; overflow: hidden; }
+  .arch-row {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--fill);
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .arch-row .icon { font-family: ui-monospace, monospace; font-size: 14px; color: var(--faded); text-align: center; }
+  .arch-row .body { min-width: 0; }
+  .arch-row .name { font-size: 14px; }
+  .arch-row .meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: ui-monospace, monospace; }
+  .arch-row .when { font-size: 11px; color: var(--muted); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- ── M-V1: EMPTY / FIRST LAUNCH ──────────────── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">M-V1</span><span class="desc">Empty / first launch</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="screen-head"><span class="title">Chats</span></div>
+      <div style="flex: 1; display: flex; flex-direction: column;">
+        <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Manager</div></div></div>
+        <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Telegram</div></div></div>
+        <div class="row special"><span class="status special">★</span><div class="body"><div class="name">Voice</div></div></div>
+        <div class="empty-hero">
+          <div class="card">
+            <h2>No chats yet</h2>
+            <p>Tap + to start your first chat. The folder defaults to your portfolio root.</p>
+            <div class="checklist">
+              <h3>setup</h3>
+              <div class="item"><span class="check">✓</span><span>Daemon connected</span></div>
+              <div class="item"><span class="check">✓</span><span>Claude subscription connected</span></div>
+              <div class="item todo"><span class="check todo">○</span><span>Connect Telegram bot</span></div>
+              <div class="item todo"><span class="check todo">○</span><span>Pair a voice device</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tab-bar">
+        <div class="tab active"><span class="icon">💬</span><span>Chats</span></div>
+        <div class="tab"><span class="icon">★</span><span>Manager</span></div>
+        <div class="tab"><span class="icon">⚙</span><span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── M-V2: DAEMON OFFLINE ──────────────────────── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">M-V2</span><span class="desc">Daemon offline — banner + queued composer</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="offline-banner">⚠ Daemon offline — reconnecting…</div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/bed-planner</div>
+          <div class="name">fix layout bug</div>
+        </div>
+      </div>
+      <div class="chat-banner">Daemon offline — your messages will send on reconnect.</div>
+      <div class="stream">
+        <div class="msg user">fix the layout bug.</div>
+        <div class="msg assistant">I'll read the layout file first.</div>
+      </div>
+      <div class="composer disabled">
+        <div class="input">queued until reconnect…</div>
+        <span class="icon-btn">🎙</span>
+        <span class="icon-btn send">▸</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── M-V3: BASH PERMISSION ────────────────────── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">M-V3</span><span class="desc">Bash permission — same 1/2/3 pattern, command instead of diff</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">~/projects/portfolio</div>
+          <div class="name">deploy to vercel</div>
+        </div>
+      </div>
+      <div class="stream">
+        <div class="msg user">deploy the latest portfolio build to vercel.</div>
+        <div class="msg assistant">I'll run the vercel deploy command — this triggers a production deploy.</div>
+
+        <div class="perm-card">
+          <div class="head">Bash command</div>
+          <div class="body-block bash">vercel deploy --prod --token=$VERCEL_TOKEN</div>
+          <div class="question">Do you want to proceed?</div>
+          <div class="opts">
+            <div class="opt yes"><span class="num">1</span><span>Yes</span></div>
+            <div class="opt"><span class="num">2</span><span>Yes, allow all <code>vercel</code> commands this session</span></div>
+            <div class="opt no"><span class="num">3</span><span>No, and tell Claude what to do differently</span><span class="esc-hint">esc</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="input">Type a message…</div>
+        <span class="icon-btn">🎙</span>
+        <span class="icon-btn send">▸</span>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── M-V4: ARCHIVED EXPANDED ──────────────────── -->
+  <div class="frame-wrap">
+    <div class="label"><span class="num">M-V4</span><span class="desc">Archived expanded — search + full-colour list, automated chats jumbled in</span></div>
+    <div class="phone-frame">
+      <div class="status-bar"><span>9:41</span><span>5G · ▮▮▮▮</span></div>
+      <div class="nav-bar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="folder">Chats</div>
+          <div class="name">Archived (47)</div>
+        </div>
+      </div>
+      <div class="arch-search">🔍 search archived chats…</div>
+      <div class="arch-list">
+        <div class="arch-row">
+          <span class="icon">✓</span>
+          <div class="body">
+            <div class="name">monthly close</div>
+            <div class="meta">freeagent · today · draft invoices ready</div>
+          </div>
+          <span class="when">1h</span>
+        </div>
+        <div class="arch-row">
+          <span class="icon">⏰</span>
+          <div class="body">
+            <div class="name">bus-watch</div>
+            <div class="meta">spawned · today 08:57 · "bus 8 on time"</div>
+          </div>
+          <span class="when">2h</span>
+        </div>
+        <div class="arch-row">
+          <span class="icon">✓</span>
+          <div class="body">
+            <div class="name">refactor api route</div>
+            <div class="meta">bed-planner · yesterday</div>
+          </div>
+          <span class="when">1d</span>
+        </div>
+        <div class="arch-row">
+          <span class="icon">⏰</span>
+          <div class="body">
+            <div class="name">weekly newsletter</div>
+            <div class="meta">spawned · Sun 09:00 · "published draft"</div>
+          </div>
+          <span class="when">3d</span>
+        </div>
+        <div class="arch-row">
+          <span class="icon">✓</span>
+          <div class="body">
+            <div class="name">devon spots</div>
+            <div class="meta">wild-swim · 2d ago</div>
+          </div>
+          <span class="when">2d</span>
+        </div>
+        <div class="arch-row">
+          <span class="icon">⏰</span>
+          <div class="body">
+            <div class="name">standup prep</div>
+            <div class="meta">spawned · 3d ago</div>
+          </div>
+          <span class="when">3d</span>
+        </div>
+        <div class="arch-row">
+          <span class="icon">✓</span>
+          <div class="body">
+            <div class="name">CRP investigation</div>
+            <div class="meta">health-tracker · 4d ago</div>
+          </div>
+          <span class="when">4d</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
