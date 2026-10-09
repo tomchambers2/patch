@@ -2,7 +2,6 @@
   ".env.example": 1,
   ".tmp-probe.mjs": 1,
   "Caddyfile": 3,
-  "README.md": 1,
   "apps/mobile/plugins/withConnectionService.js": 1,
   "apps/mobile/src/lib/connection.ts": 2,
   "apps/mobile/src/lib/notificationDelivery.ts": 1,
