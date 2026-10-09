@@ -192,8 +192,19 @@ function build(info, { box }) {
 
   const run = (cmd, args, opts = {}) =>
     execFileSync(cmd, args, { stdio: 'inherit', cwd: repo, ...opts });
-  console.log('==> rebuilding @patch/wire + @patch/auth (Metro bundles their dist)');
-  run('corepack', ['pnpm', '--filter', '@patch/wire', '--filter', '@patch/auth', 'build']);
+  // @patch/relay too: the app's relay transport imports it, and a clean checkout
+  // has no dist for Metro to resolve (a machine that had built it once never saw this).
+  console.log('==> rebuilding @patch/wire + @patch/auth + @patch/relay (Metro bundles their dist)');
+  run('corepack', [
+    'pnpm',
+    '--filter',
+    '@patch/wire',
+    '--filter',
+    '@patch/auth',
+    '--filter',
+    '@patch/relay',
+    'build',
+  ]);
 
   const env = gradleEnv({ base: process.env, info, signing, home, platform: process.platform });
   if (!existsSync(`${env.JAVA_HOME}/bin/java`)) throw new Error(`no JDK at ${env.JAVA_HOME}`);
