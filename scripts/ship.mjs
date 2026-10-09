@@ -1363,7 +1363,7 @@ function desktop(info) {
   }
   const app = `${rel}/mac-arm64/Patch.app`;
   const sig = out('sh', ['-c', `codesign -dv "${app}" 2>&1 || true`]);
-  if (/Signature=adhoc/.test(sig) || !/Identifier=com\.tomchambers\.patch/.test(sig)) {
+  if (/Signature=adhoc/.test(sig) || !/Identifier=io\.github\.tomchambers2\.patch/.test(sig)) {
     throw new Error(`refusing to publish: ${app} is not properly signed.\n${sig}`);
   }
   if (!ok('codesign', ['--verify', '--deep', '--strict', app])) {
