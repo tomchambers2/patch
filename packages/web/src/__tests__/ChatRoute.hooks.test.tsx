@@ -1,7 +1,7 @@
 // spec/20-hooks.md § On the user's message — the composer's hook-check flow:
 // Checking… while in flight, pass sends silently, advise sends with a note,
 // block holds the message behind a card with Use suggestion / Edit / Send
-// anyway, and a failed/timed-out hook is shown exactly like a block.
+// anyway, and a failed/timed-out hook never holds the message.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -216,9 +216,9 @@ describe('ChatRoute — message hooks', () => {
     expect(sent.message).toBe('my hunter2 password');
   });
 
-  it('a failed hook holds the message and shows its error, not an analysis', async () => {
+  it('a failed hook never holds the message: it sends with a failure note', async () => {
     vi.mocked(api.checkHooks).mockResolvedValue({
-      decision: 'block',
+      decision: 'advise',
       results: [
         {
           hookId: 'hook_c',
@@ -233,25 +233,24 @@ describe('ChatRoute — message hooks', () => {
     const ws = { send: vi.fn(), requestReplay: vi.fn() };
     renderChat(ws);
     typeAndSend('hello');
-    const card = await screen.findByTestId('hook-block-card');
-    expect(card).toHaveTextContent('broken hook');
-    expect(screen.getByTestId('hook-block-error')).toHaveTextContent('boom');
-    expect(screen.queryByTestId(`hook-use-suggestion-hook_c`)).toBeNull();
-    expect(ws.send).not.toHaveBeenCalled();
+    await waitFor(() => expect(ws.send).toHaveBeenCalled());
+    expect(screen.queryByTestId('hook-block-card')).toBeNull();
+    fireEvent.click(await screen.findByTestId('msg-hook-advise-toggle'));
+    expect(screen.getByTestId('msg-hook-advise-body')).toHaveTextContent('Hook failed');
+    expect(screen.getByTestId('msg-hook-advise-body')).toHaveTextContent('boom');
   });
 
-  it('a timed-out hook holds the message and says so', async () => {
+  it('a timed-out hook never holds the message either', async () => {
     vi.mocked(api.checkHooks).mockResolvedValue({
-      decision: 'block',
+      decision: 'advise',
       results: [{ hookId: 'hook_d', hookName: 'slow hook', status: 'timeout', durationMs: 15000 }],
     });
     seed();
     const ws = { send: vi.fn(), requestReplay: vi.fn() };
     renderChat(ws);
     typeAndSend('hello');
-    const card = await screen.findByTestId('hook-block-card');
-    expect(screen.getByTestId('hook-block-error')).toHaveTextContent('Timed out');
-    expect(ws.send).not.toHaveBeenCalled();
-    expect(card).toBeTruthy();
+    await waitFor(() => expect(ws.send).toHaveBeenCalled());
+    expect(screen.queryByTestId('hook-block-card')).toBeNull();
+    expect(await screen.findByTestId('msg-hook-advise')).toHaveTextContent('slow hook');
   });
 });

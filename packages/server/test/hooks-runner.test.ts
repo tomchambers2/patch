@@ -126,12 +126,12 @@ describe('HookRunner', () => {
     expect(blocking?.analysis).toBe('looks dangerous');
   });
 
-  it('a hook that never answers times out and the aggregate holds as block', async () => {
+  it('a hook that never answers times out and the aggregate advises, never blocks', async () => {
     const link = new InProcessDaemonLink();
     const hooks = new FakeHooksStore([hook('hook_a', { timeoutMs: 20 })]);
     const runner = new HookRunner({ hooks, daemonLink: link, logger: silentLogger });
     const result = await runner.check(ctx);
-    expect(result.decision).toBe('block');
+    expect(result.decision).toBe('advise');
     expect(result.results[0]?.status).toBe('timeout');
   });
 
@@ -141,7 +141,7 @@ describe('HookRunner', () => {
     const hooks = new FakeHooksStore([hook('hook_a', { gate: { hosts: null } })]);
     const runner = new HookRunner({ hooks, daemonLink: link, logger: silentLogger });
     const result = await runner.check(ctx);
-    expect(result.decision).toBe('block');
+    expect(result.decision).toBe('advise');
     expect(result.results[0]?.status).toBe('failed');
     expect(result.results[0]?.error).toMatch(/offline/);
     expect(link.sent).toHaveLength(0);

@@ -61,4 +61,24 @@ test.describe('snooze menu', () => {
     await expect(page.getByTestId('snooze-custom-input')).toBeVisible();
     await expect(page.getByTestId('snooze-custom-submit')).toBeVisible();
   });
+
+  test('replaces the ⋯ menu in place, showing only snooze options', async ({ page }) => {
+    await page.goto(HARNESS);
+    await page.getByTestId('action-more').click();
+    const head = page.getByTestId('head-menu');
+    await expect(page.getByTestId('action-tools')).toBeVisible();
+    const before = (await head.boundingBox())!;
+    await page.getByTestId('action-snooze').click();
+    await expect(page.getByTestId('snooze-menu')).toBeVisible();
+    // Same menu, same anchor: right edge and top do not move.
+    const after = (await head.boundingBox())!;
+    expect(Math.abs(after.x + after.width - (before.x + before.width))).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+    // Nothing but snooze options is left in it.
+    await expect(page.getByTestId('action-tools')).toBeHidden();
+    await expect(page.getByTestId('action-snooze')).toBeHidden();
+    const snooze = (await page.getByTestId('snooze-menu').boundingBox())!;
+    expect(snooze.y).toBeGreaterThanOrEqual(after.y);
+    expect(snooze.y + snooze.height).toBeLessThanOrEqual(after.y + after.height);
+  });
 });

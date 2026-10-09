@@ -2944,6 +2944,23 @@ a.ch-row:hover {
 .snooze-wrap-row > .head-menu-item.is-snoozed {
   color: var(--accent-strong);
 }
+/* Choosing Snooze in a ⋯ / hamburger menu swaps that menu's contents for the
+   snooze options in place — same box, same position — rather than opening a
+   second panel that lands somewhere else. */
+.head-menu:has(.snooze-menu) > :not(.head-menu-snooze) {
+  display: none;
+}
+.head-menu:has(.snooze-menu) .snooze-wrap-row > .head-menu-item {
+  display: none;
+}
+.snooze-wrap-row > .snooze-menu {
+  position: static;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
 /* Icon-only header action buttons (Editor / Archive / Open in new window / …). */
 .head-action {
   width: 32px;

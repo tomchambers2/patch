@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '../stores/chatStore.js';
 import { useUiStore } from '../stores/uiStore.js';
 import { api } from '../api/rest.js';
@@ -20,6 +21,7 @@ import type { ChatRow } from '../stores/types.js';
 import { useDismissOnClickOff } from '../lib/dismissOnClickOff.js';
 import { SNOOZE_PRESETS as PRESETS, formatWakeTime } from '../lib/snoozePresets.js';
 import { failed } from '../lib/errorCopy.js';
+import { navigateAfterArchive } from '../lib/archiveNav.js';
 
 export { formatWakeTime };
 
@@ -42,6 +44,7 @@ export function SnoozeMenu({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const setSnoozed = useChatStore((s) => s.setSnoozed);
   const pushError = useUiStore((s) => s.pushError);
+  const navigate = useNavigate();
   const snoozed = isSnoozed(row);
 
   useDismissOnClickOff(open, [menuRef, triggerRef], () => close());
@@ -66,6 +69,9 @@ export function SnoozeMenu({
   async function apply(snoozedUntil: number | null): Promise<void> {
     const previous = row.snoozedUntil;
     close();
+    // Snoozing takes the chat off the list, so move on like archive does —
+    // resolved before the flip, while this chat is still in the list.
+    if (snoozedUntil !== null) navigateAfterArchive(navigate, [row.chatId]);
     setSnoozed(row.chatId, snoozedUntil);
     try {
       await api.snoozeChat(row.chatId, snoozedUntil);

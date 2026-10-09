@@ -378,28 +378,49 @@ export const api = {
   enableHook: (id: string) => request<Hook>(`/api/hooks/${id}/enable`, { method: 'POST' }),
   disableHook: (id: string) => request<Hook>(`/api/hooks/${id}/disable`, { method: 'POST' }),
   /** spec/20-hooks.md § Checking a message — called by the composer before send. */
-  checkHooks: async (chatId: string, message: string, files: OutgoingFile[] = []) => {
-    const images = await hookImages(files);
+  checkHooks: async (
+    chatId: string,
+    message: string,
+    files: OutgoingFile[] = [],
+  ): Promise<HookCheckResponse> => {
+    // A hook check never stops a send (spec/20-hooks.md § On the user's
+    // message): when the check itself can't be completed, the message goes out
+    // and the reason rides on it as a failed-hook note.
+    const unchecked = (error: string): HookCheckResponse => ({
+      decision: 'advise',
+      results: [
+        { hookId: 'hook-check', hookName: 'Hook check', status: 'failed', error, durationMs: 0 },
+      ],
+    });
+    let prepared;
+    try {
+      prepared = await hookImages(files);
+    } catch (err) {
+      return unchecked((err as Error).message);
+    }
+    const { images, skipped } = prepared;
     // Bounded client-side: a stalled connection must not leave the composer on
     // Checking… forever. The server's own per-hook timeouts sit well inside this.
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), HOOK_CHECK_TIMEOUT_MS);
     try {
-      return await request<HookCheckResponse>('/api/hooks/check', {
+      const res = await request<HookCheckResponse>('/api/hooks/check', {
         method: 'POST',
         body: { chatId, message, ...(images.length > 0 ? { images } : {}) },
         signal: ctrl.signal,
       });
+      if (skipped.length === 0) return res;
+      const note = unchecked(skipped.join('; ')).results;
+      return {
+        decision: res.decision === 'block' ? 'block' : 'advise',
+        results: [...res.results, ...note],
+      };
     } catch (err) {
-      if (ctrl.signal.aborted) throw new Error('timed out waiting for hooks');
-      // A bare gateway status comes from the proxy in front of the server, not
-      // from the hook check itself — say so, and say what happened to the message.
+      if (ctrl.signal.aborted) return unchecked('timed out waiting for hooks');
       if (err instanceof ApiError && [502, 503, 504].includes(err.status)) {
-        throw new Error(
-          `Patch server unreachable (HTTP ${err.status}) — it may be restarting. Your message was not sent; try again in a moment.`,
-        );
+        return unchecked(`Patch server unreachable (HTTP ${err.status}) — it may be restarting`);
       }
-      throw err;
+      return unchecked((err as Error).message);
     } finally {
       clearTimeout(timer);
     }

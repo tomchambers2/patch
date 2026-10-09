@@ -578,21 +578,41 @@ describe('one conversation with the chat', () => {
     ]);
   });
 
-  test('pushContext adds a conversation item without asking for a response', async () => {
+  test('a message landing in the chat is a short quiet note, not a request for a response', async () => {
     const { deps, last } = makeDeps();
     const session = new OpenAIRealtimeSession(makeInit(), deps);
     const ws = await open(session, last);
     const before = ws.ofType('response.create').length;
     session.pushContext('assistant', 'The build finished.');
-    expect(ws.sent.at(-1)).toEqual({
-      type: 'conversation.item.create',
-      item: {
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text: 'The build finished.' }],
-      },
-    });
+    const item = (ws.sent.at(-1) as { item: { role: string; content: Array<{ text: string }> } })
+      .item;
+    expect(item.role).toBe('user');
+    expect(item.content[0]!.text).toContain('the agent wrote in the chat: "The build finished."');
     expect(ws.ofType('response.create').length).toBe(before);
+  });
+
+  test('look_back: declared when the host can search, answered at once from the chat', async () => {
+    const lookBack = vi.fn(() => 'Agent: it was archived by a client');
+    const { deps, last } = makeDeps({ lookBack });
+    const ws = await open(new OpenAIRealtimeSession(makeInit({ chatId: 'chat-9' }), deps), last);
+    const update = ws.ofType('session.update')[0] as {
+      session: { tools: Array<{ name: string }>; instructions: string };
+    };
+    expect(update.session.tools.map((t) => t.name)).toContain('look_back');
+    expect(update.session.instructions).toContain('call look_back');
+    ws.serverSend({
+      type: 'response.function_call_arguments.done',
+      name: 'look_back',
+      call_id: 'lb1',
+      arguments: JSON.stringify({ query: 'archived' }),
+    });
+    await vi.waitFor(() => expect(lookBack).toHaveBeenCalledWith('chat-9', 'archived'));
+    const out = ws
+      .ofType('conversation.item.create')
+      .map((m) => m['item'] as { type: string; output?: string })
+      .find((i) => i.type === 'function_call_output');
+    expect(JSON.parse(out!.output!)).toEqual({ result: 'Agent: it was archived by a client' });
+    expect(ws.ofType('response.create').length).toBeGreaterThan(0);
   });
 
   test('tallies the usage each response reports', async () => {

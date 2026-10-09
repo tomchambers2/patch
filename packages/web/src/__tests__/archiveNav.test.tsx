@@ -100,6 +100,7 @@ describe('archiving the open chat moves you on', () => {
     useUiStore.setState({ forgottenFolders: [], errors: [] });
     useUiStore.getState().setSearchQuery('');
     useSelectionStore.setState({ order: [], anchor: null, selected: [] });
+    vi.spyOn(api, 'snoozeChat').mockResolvedValue(undefined as never);
     vi.spyOn(api, 'archiveChat').mockResolvedValue(undefined as never);
     vi.spyOn(api, 'listChatsArchived').mockResolvedValue({ chats: [], nextOffset: null });
     vi.spyOn(api, 'listChatsDeleted').mockResolvedValue({ chats: [], nextOffset: null });
@@ -169,5 +170,24 @@ describe('archiving the open chat moves you on', () => {
       expect(loc.pathname).toBe('/chats/r3');
     });
     expect(useChatStore.getState().chats['r2']?.status).toBe('archived');
+  });
+
+  it('snoozing the open chat from the header moves you to the next chat', () => {
+    seedThree();
+    renderAt('r2', <ChatHeader row={row({ chatId: 'r2', lastUpdated: 200 })} />);
+    fireEvent.click(screen.getByTestId('action-more'));
+    fireEvent.click(screen.getByTestId('action-snooze'));
+    fireEvent.click(screen.getByTestId('snooze-preset-1-hour'));
+    expect(loc.pathname).toBe('/chats/r3');
+    expect(useChatStore.getState().chats['r2']?.snoozedUntil).not.toBeNull();
+  });
+
+  it('snoozing the only chat leaves you on a new chat', () => {
+    useChatStore.getState().hydrate([row({ chatId: 'r1' })]);
+    renderAt('r1', <ChatHeader row={row({ chatId: 'r1' })} />);
+    fireEvent.click(screen.getByTestId('action-more'));
+    fireEvent.click(screen.getByTestId('action-snooze'));
+    fireEvent.click(screen.getByTestId('snooze-preset-1-hour'));
+    expect(loc.pathname).toBe('/chats/new');
   });
 });

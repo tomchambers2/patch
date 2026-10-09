@@ -63,7 +63,14 @@ import {
   type VoiceTurnSource,
 } from './session.js';
 import type { VoiceSessionLike } from './voice-session-like.js';
-import { chatBriefing, withBriefing } from './chatBriefing.js';
+import {
+  chatBriefing,
+  liveNote,
+  withBriefing,
+  LOOK_BACK_DESCRIPTION,
+  LOOK_BACK_RULE,
+  LOOK_BACK_TOOL_NAME,
+} from './chatBriefing.js';
 import {
   DISPATCH_TOOL_DESCRIPTION,
   DISPATCH_TOOL_NAME,
@@ -109,6 +116,8 @@ export interface OpenAIRealtimeDeps {
   model: string;
   /** Who does the work (spec/07 § The fast voice and the chat's agent). Defaults to `auto`. */
   handoff?: VoiceHandoff;
+  /** The `look_back` tool's search over this chat. Absent means the voice is not given the tool. */
+  lookBack?: (chatId: string, query: string) => string;
   transcribeModel?: string;
   voice?: string;
   getChatContext?: (chatId: string) => Promise<GeminiContextTurn[]> | GeminiContextTurn[];
@@ -317,7 +326,11 @@ export class OpenAIRealtimeSession implements VoiceSessionLike {
       type: 'session.update',
       session: {
         type: 'realtime',
-        instructions: withBriefing(hostedVoiceInstruction(handoff), this.briefing),
+        instructions: withBriefing(
+          hostedVoiceInstruction(handoff) +
+            (this.deps.lookBack !== undefined ? `\n\n${LOOK_BACK_RULE}` : ''),
+          this.briefing,
+        ),
         output_modalities: ['audio'],
         audio: {
           input: {
@@ -333,8 +346,8 @@ export class OpenAIRealtimeSession implements VoiceSessionLike {
             voice: this.deps.voice ?? DEFAULT_OPENAI_REALTIME_VOICE,
           },
         },
-        tools:
-          handoff === 'never'
+        tools: [
+          ...(handoff === 'never'
             ? []
             : [
                 {
@@ -352,8 +365,28 @@ export class OpenAIRealtimeSession implements VoiceSessionLike {
                     required: ['request'],
                   },
                 },
-              ],
-        tool_choice: handoff === 'always' ? 'required' : 'auto',
+              ]),
+          ...(this.deps.lookBack !== undefined
+            ? [
+                {
+                  type: 'function',
+                  name: LOOK_BACK_TOOL_NAME,
+                  description: LOOK_BACK_DESCRIPTION,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: 'A few key words to search the chat for.',
+                      },
+                    },
+                    required: ['query'],
+                  },
+                },
+              ]
+            : []),
+        ],
+        tool_choice: handoff === 'always' && this.deps.lookBack === undefined ? 'required' : 'auto',
       },
     };
   }
@@ -543,6 +576,10 @@ export class OpenAIRealtimeSession implements VoiceSessionLike {
           this.responseHadToolCall = true;
           void this.handleDispatch(ev.call_id, ev.arguments ?? '{}');
         }
+        if (ev.name === LOOK_BACK_TOOL_NAME && ev.call_id) {
+          this.responseHadToolCall = true;
+          this.handleLookBack(ev.call_id, ev.arguments ?? '{}');
+        }
         return;
       case 'response.done':
         this.onResponseDone(ev.response ?? {});
@@ -588,14 +625,45 @@ export class OpenAIRealtimeSession implements VoiceSessionLike {
 
   pushContext(role: 'user' | 'assistant', text: string): void {
     if (this.closed || !this.setupDone) return;
+    // A short quiet note from the user's side, not the message replayed as if someone had said it.
     this.sendJson({
       type: 'conversation.item.create',
       item: {
         type: 'message',
-        role,
-        content: [{ type: role === 'user' ? 'input_text' : 'output_text', text }],
+        role: 'user',
+        content: [{ type: 'input_text', text: liveNote(role, text) }],
       },
     });
+  }
+
+  /** The `look_back` tool: search the chat on the host and answer at once; no model, no wait. */
+  private handleLookBack(callId: string, rawArgs: string): void {
+    let query = '';
+    try {
+      const args = JSON.parse(rawArgs) as { query?: unknown };
+      if (typeof args.query === 'string') query = args.query;
+    } catch {
+      query = rawArgs;
+    }
+    let result: string;
+    try {
+      result = this.deps.lookBack!(this.currentChatId, query);
+    } catch (err) {
+      result = `Looking back failed: ${(err as Error).message}`;
+      this.deps.logger.error(
+        { sessionId: this.init.sessionId, err: (err as Error).message, query },
+        'openai-realtime: look_back failed',
+      );
+    }
+    this.deps.logger.info(
+      { sessionId: this.init.sessionId, query, chars: result.length, result },
+      'openai-realtime: look_back',
+    );
+    this.sendJson({
+      type: 'conversation.item.create',
+      item: { type: 'function_call_output', call_id: callId, output: JSON.stringify({ result }) },
+    });
+    this.sendJson({ type: 'response.create' });
   }
 
   private onTranscript(itemId: string, text: string): void {

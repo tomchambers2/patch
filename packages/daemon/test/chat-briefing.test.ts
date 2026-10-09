@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chatBriefing, withBriefing } from '../src/audio/chatBriefing.js';
+import { chatBriefing, liveNote, withBriefing } from '../src/audio/chatBriefing.js';
 
 describe('chat briefing', () => {
   it('is empty for a chat with nothing in it, and adds nothing to the instructions', () => {
@@ -30,5 +30,15 @@ describe('chat briefing', () => {
     expect(text).toContain('message 59');
     expect(text).not.toContain('message 0 ');
     expect(text.length).toBeLessThan(9_000);
+  });
+});
+
+describe('live notes', () => {
+  it('are one short quiet note, never the message replayed in full', () => {
+    const note = liveNote('assistant', `done ${'word '.repeat(300)}`);
+    expect(note).toContain('the agent wrote in the chat');
+    expect(note).toMatch(/not for you to answer/);
+    expect(note.length).toBeLessThan(520);
+    expect(liveNote('user', 'try  again')).toContain('the user typed in the chat: "try again"');
   });
 });

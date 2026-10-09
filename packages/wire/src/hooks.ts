@@ -158,16 +158,14 @@ export const HookRunResult = z
 export type HookRunResult = z.infer<typeof HookRunResult>;
 
 /**
- * The aggregate decision a client acts on. A `failed`/`timeout` result holds
- * the message exactly as a `block` does (spec/20-hooks.md § On the user's
- * message — "never sent silently, never dropped silently"), so it ranks
- * alongside `block` here; each result's own `status` is what tells the
- * composer whether to render a block card or a failure card for that hook.
- * Ranked block/failed > advise > pass.
+ * The aggregate decision a client acts on. Only a genuine `block` from a hook
+ * that ran holds a message: a `failed`/`timeout` result never does (a hook
+ * must never block a send), it ranks as `advise` so the failure is shown on
+ * the sent message. Ranked block > advise (incl. failed) > pass.
  */
 export function aggregateHookDecision(results: readonly HookRunResult[]): HookDecision {
-  if (results.some((r) => r.status !== 'ok' || r.decision === 'block')) return 'block';
-  if (results.some((r) => r.decision === 'advise')) return 'advise';
+  if (results.some((r) => r.status === 'ok' && r.decision === 'block')) return 'block';
+  if (results.some((r) => r.status !== 'ok' || r.decision === 'advise')) return 'advise';
   return 'pass';
 }
 

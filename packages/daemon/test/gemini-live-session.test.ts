@@ -649,18 +649,76 @@ describe('GeminiLiveSession — one conversation with the chat', () => {
     expect(session.isAwaitingHandoff()).toBe(false);
   });
 
-  test('pushContext adds a message to the model context without asking it to answer', async () => {
+  test('a message landing in the chat is a short quiet note from the user side, not asking for an answer', async () => {
     const { deps, lastWs } = makeDeps();
     const session = new GeminiLiveSession(makeInit(), deps);
     const ws = await openSession(session, lastWs);
     session.pushContext('assistant', 'The build finished.');
-    const last = ws.sentJson().at(-1);
-    expect(last).toEqual({
+    const last = ws.sentJson().at(-1) as {
       clientContent: {
-        turns: [{ role: 'model', parts: [{ text: 'The build finished.' }] }],
-        turnComplete: false,
+        turns: Array<{ role: string; parts: Array<{ text: string }> }>;
+        turnComplete: boolean;
+      };
+    };
+    expect(last.clientContent.turnComplete).toBe(false);
+    expect(last.clientContent.turns[0]!.role).toBe('user');
+    expect(last.clientContent.turns[0]!.parts[0]!.text).toContain(
+      'the agent wrote in the chat: "The build finished."',
+    );
+  });
+
+  test('look_back: declared only when the host can search, and answered at once from the chat', async () => {
+    const without = makeDeps();
+    const w0 = await openSession(new GeminiLiveSession(makeInit(), without.deps), without.lastWs);
+    const [first0] = w0.sentJson() as [{ setup: { tools?: unknown } }];
+    expect(JSON.stringify(first0.setup.tools ?? [])).not.toContain('look_back');
+
+    const lookBack = vi.fn(() => 'User: why was it archived');
+    const { deps, lastWs } = makeDeps({ lookBack });
+    const session = new GeminiLiveSession(makeInit({ chatId: 'chat-9' }), deps);
+    const ws = await openSession(session, lastWs);
+    const [first] = ws.sentJson() as [
+      {
+        setup: {
+          tools: Array<{ functionDeclarations: Array<{ name: string }> }>;
+          systemInstruction: { parts: Array<{ text: string }> };
+        };
       },
+    ];
+    expect(first.setup.tools[0]!.functionDeclarations.map((d) => d.name)).toEqual([
+      DISPATCH_TOOL_NAME,
+      'look_back',
+    ]);
+    expect(first.setup.systemInstruction.parts[0]!.text).toContain('call look_back');
+    ws.serverSend({
+      toolCall: { functionCalls: [{ id: 'lb-1', name: 'look_back', args: { query: 'archived' } }] },
     });
+    await vi.waitFor(() => expect(lookBack).toHaveBeenCalledWith('chat-9', 'archived'));
+    const reply = (ws.sentJson() as Array<Record<string, unknown>>).find(
+      (f) => 'toolResponse' in f,
+    ) as {
+      toolResponse: {
+        functionResponses: Array<{ id: string; response: { result: string; scheduling: string } }>;
+      };
+    };
+    expect(reply.toolResponse.functionResponses[0]).toMatchObject({
+      id: 'lb-1',
+      response: { result: 'User: why was it archived', scheduling: 'INTERRUPT' },
+    });
+  });
+
+  test('look_back that throws says so to the voice and in the log, never silently', async () => {
+    const lookBack = vi.fn(() => {
+      throw new Error('chat gone');
+    });
+    const { deps, lastWs } = makeDeps({ lookBack });
+    const ws = await openSession(new GeminiLiveSession(makeInit(), deps), lastWs);
+    ws.serverSend({
+      toolCall: { functionCalls: [{ id: 'lb-2', name: 'look_back', args: { query: 'x' } }] },
+    });
+    await vi.waitFor(() =>
+      expect(ws.sent.some((s) => s.includes('Looking back failed: chat gone'))).toBe(true),
+    );
   });
 
   test('the instruction makes it the voice of this conversation, not an assistant with no knowledge', async () => {

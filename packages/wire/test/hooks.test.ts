@@ -105,11 +105,12 @@ describe('aggregateHookDecision', () => {
     expect(aggregateHookDecision([ok('advise'), ok('block')])).toBe('block');
   });
 
-  it('a failed/timeout result holds the message like a block', () => {
+  it('a failed/timeout result never holds the message — it advises', () => {
     const failed: HookRunResult = { hookId: 'h', hookName: 'h', status: 'failed', durationMs: 1 };
-    expect(aggregateHookDecision([ok('pass'), failed])).toBe('block');
+    expect(aggregateHookDecision([ok('pass'), failed])).toBe('advise');
     const timeout: HookRunResult = { hookId: 'h', hookName: 'h', status: 'timeout', durationMs: 1 };
-    expect(aggregateHookDecision([ok('advise'), timeout])).toBe('block');
+    expect(aggregateHookDecision([ok('advise'), timeout])).toBe('advise');
+    expect(aggregateHookDecision([ok('block'), timeout])).toBe('block');
   });
 });
 

@@ -499,28 +499,41 @@ describe('api.voiceTranscribe (composer dictation)', () => {
   });
 });
 
-describe('checkHooks gateway failure', () => {
-  it.each([502, 503, 504])(
-    'explains an HTTP %i as the server being unreachable',
-    async (status) => {
-      fetchMock.mockResolvedValueOnce(new Response('Bad Gateway', { status }));
-      await expect(api.checkHooks('c1', 'hi')).rejects.toThrow(
-        new RegExp(
-          `Patch server unreachable \\(HTTP ${status}\\).*message was not sent.*try again`,
-          'i',
-        ),
-      );
-    },
-  );
+const failedNote = (re: RegExp) => ({
+  decision: 'advise',
+  results: [expect.objectContaining({ status: 'failed', error: expect.stringMatching(re) })],
+});
+
+describe('checkHooks never throws — a failed check sends with a note', () => {
+  it.each([502, 503, 504])('reports an HTTP %i as the server being unreachable', async (status) => {
+    fetchMock.mockResolvedValueOnce(new Response('Bad Gateway', { status }));
+    await expect(api.checkHooks('c1', 'hi')).resolves.toEqual(
+      failedNote(new RegExp(`Patch server unreachable \\(HTTP ${status}\\)`)),
+    );
+  });
 
   it('keeps the server-supplied error for a JSON failure', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'invalid body' }, 400));
-    await expect(api.checkHooks('c1', 'hi')).rejects.toThrow('invalid body');
+    await expect(api.checkHooks('c1', 'hi')).resolves.toEqual(failedNote(/invalid body/));
+  });
+
+  it('a network error still resolves', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(api.checkHooks('c1', 'hi')).resolves.toEqual(failedNote(/Failed to fetch/));
+  });
+
+  it('an oversize attachment is skipped, the check still runs and notes it', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ decision: 'pass', results: [] }, 200));
+    const big = new File([new Uint8Array(5_000_000)], 'shot.png', { type: 'image/png' });
+    const res = await api.checkHooks('c1', 'hi', [{ file: big, name: 'shot.png', kind: 'image' }]);
+    expect(res).toEqual(failedNote(/shot\.png not checked/));
+    const body = JSON.parse((fetchMock.mock.calls.at(-1)?.[1] as RequestInit).body as string);
+    expect(body.images).toBeUndefined();
   });
 });
 
 describe('checkHooks timeout', () => {
-  it('rejects instead of hanging when the server never answers', async () => {
+  it('resolves with a note instead of hanging when the server never answers', async () => {
     vi.useFakeTimers();
     try {
       fetchMock.mockImplementation(
@@ -530,9 +543,8 @@ describe('checkHooks timeout', () => {
           }),
       );
       const p = api.checkHooks('c1', 'hi');
-      const settled = expect(p).rejects.toThrow(/timed out/i);
       await vi.advanceTimersByTimeAsync(20_000);
-      await settled;
+      await expect(p).resolves.toEqual(failedNote(/timed out/i));
     } finally {
       vi.useRealTimers();
     }

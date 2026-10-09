@@ -167,6 +167,11 @@ export interface AudioServerOptions {
    */
   getChatContext?: (chatId: string) => Promise<GeminiContextTurn[]> | GeminiContextTurn[];
   /**
+   * A hosted voice's `look_back` (spec/07 § Keeping voice and text as one conversation): the
+   * messages in the chat that match a few words. Absent means the voice is not given the tool.
+   */
+  lookBack?: (chatId: string, query: string) => string;
+  /**
    * Existence check for the chat declared in `audio.session_start` (E1-d3).
    * A voice session must be bound to a real chat BEFORE any audio is
    * accepted — otherwise the host would run the whole STT pipeline only to
@@ -723,6 +728,7 @@ export async function startAudioServer(opts: AudioServerOptions): Promise<AudioS
             }),
             onFatal,
             ...(opts.getChatContext ? { getChatContext: opts.getChatContext } : {}),
+            ...(opts.lookBack ? { lookBack: opts.lookBack } : {}),
             ...(opts.geminiWsCtor ? { wsCtor: opts.geminiWsCtor } : {}),
             ...(opts.geminiWsUrl ? { wsUrl: opts.geminiWsUrl } : {}),
           });
@@ -747,6 +753,7 @@ export async function startAudioServer(opts: AudioServerOptions): Promise<AudioS
             }),
             onFatal,
             ...(opts.getChatContext ? { getChatContext: opts.getChatContext } : {}),
+            ...(opts.lookBack ? { lookBack: opts.lookBack } : {}),
             ...(opts.openaiWsCtor ? { wsCtor: opts.openaiWsCtor } : {}),
             ...(opts.openaiWsUrl ? { wsUrl: opts.openaiWsUrl } : {}),
           });

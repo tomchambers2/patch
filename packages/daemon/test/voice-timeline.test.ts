@@ -228,3 +228,51 @@ describe("a hand-off turn (spec/07 § The fast voice and the chat's agent)", () 
     expect(capturedPrompts[1]).not.toContain('relayed to you by the call');
   });
 });
+
+describe('looking back in a chat (spec/07 § Keeping voice and text as one conversation)', () => {
+  async function chatWith(lines: Array<['user' | 'assistant', string]>) {
+    const { daemon, folder } = setup();
+    const chatId = await daemon.spawnChat({ folder });
+    for (const [role, content] of lines) daemon.recordVoiceMessage({ chatId, role, content });
+    return { daemon, chatId };
+  }
+
+  it('returns the messages that match the most words, oldest first, each shortened', async () => {
+    const { daemon, chatId } = await chatWith([
+      ['user', 'the archive request fails on the server'],
+      ['assistant', 'weather is fine today'],
+      ['user', 'why did the chat get archived last night'],
+      ['assistant', `archived by a client on your IP ${'x'.repeat(600)}`],
+    ]);
+    const out = daemon.searchChat(chatId, 'archived chat');
+    const lines = out.split('\n');
+    expect(lines[0]).toBe('User: why did the chat get archived last night');
+    expect(lines.some((l) => l.includes('weather'))).toBe(false);
+    expect(lines.at(-1)!.length).toBeLessThan(420);
+    expect(lines.at(-1)).toMatch(/^Agent: archived by a client/);
+  });
+
+  it('says plainly when nothing matches or there is nothing to search for', async () => {
+    const { daemon, chatId } = await chatWith([['user', 'hello there']]);
+    expect(daemon.searchChat(chatId, 'zebra')).toBe('Nothing in this chat matches "zebra".');
+    expect(daemon.searchChat(chatId, 'a an')).toMatch(/key words/);
+  });
+
+  it('leaves out the voice tag, and fails for a chat that does not exist', async () => {
+    const { daemon, chatId } = await chatWith([['user', '[voice • web] the oven is broken']]);
+    expect(daemon.searchChat(chatId, 'oven')).toBe('User: the oven is broken');
+    expect(() => daemon.searchChat('no-such-chat', 'oven')).toThrow();
+  });
+
+  it("hands a call the chat's goal, open to-dos and status alongside its history", async () => {
+    const { daemon, chatId } = await chatWith([['user', 'fix the voice call']]);
+    daemon.setTodos(chatId, [
+      { text: 'write tests', status: 'completed' },
+      { text: 'deploy it', status: 'pending' },
+    ]);
+    const ctx = daemon.voiceContext(chatId, { maxChars: 10_000 });
+    expect(ctx.openTodos).toEqual(['deploy it']);
+    expect(ctx.status).toBeNull();
+    expect(ctx.goal).toBeNull();
+  });
+});

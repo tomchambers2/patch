@@ -52,7 +52,14 @@ import type { SessionInit, SessionDeps, VoiceTurnSource, SessionState } from './
 import type { VoiceSessionLike, VoiceReplyWriter, VoiceTimeline } from './voice-session-like.js';
 import { MicLevelWatch, micSilentMessage } from './micLevel.js';
 import { addTokens, ZERO_TOKENS, type EngineCosting, type EngineTokens } from './voiceCost.js';
-import { chatBriefing, withBriefing } from './chatBriefing.js';
+import {
+  chatBriefing,
+  liveNote,
+  withBriefing,
+  LOOK_BACK_DESCRIPTION,
+  LOOK_BACK_RULE,
+  LOOK_BACK_TOOL_NAME,
+} from './chatBriefing.js';
 
 /** The documented Gemini Live native-audio model as of 2026-09-16. */
 export const DEFAULT_GEMINI_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
@@ -104,6 +111,8 @@ export interface GeminiLiveDeps {
   model?: string;
   /** Who does the work (spec/07 § The fast voice and the chat's agent). Defaults to `auto`. */
   handoff?: VoiceHandoff;
+  /** The `look_back` tool's search over this chat. Absent means the voice is not given the tool. */
+  lookBack?: (chatId: string, query: string) => string;
   /**
    * One-time context snapshot (spec/07 § Keeping voice and text as one
    * conversation): the target chat's recent history, fetched once at session
@@ -130,7 +139,7 @@ interface GeminiSetupMessage {
     model: string;
     generationConfig: { responseModalities: ['AUDIO'] };
     systemInstruction: { parts: [{ text: string }] };
-    tools?: [{ functionDeclarations: [GeminiFunctionDeclaration] }];
+    tools?: [{ functionDeclarations: GeminiFunctionDeclaration[] }];
     inputAudioTranscription: Record<string, never>;
     outputAudioTranscription: Record<string, never>;
   };
@@ -271,40 +280,64 @@ function buildSetupMessage(
   model: string,
   handoff: VoiceHandoff,
   briefing: string,
+  lookBack: boolean,
 ): GeminiSetupMessage {
+  const declarations: GeminiFunctionDeclaration[] = [
+    // `never` has no agent, so no dispatch tool to call.
+    ...(handoff === 'never'
+      ? []
+      : [
+          {
+            name: DISPATCH_TOOL_NAME,
+            description: ASYNC_DISPATCH_TOOL_DESCRIPTION,
+            parameters: {
+              type: 'OBJECT' as const,
+              properties: {
+                request: {
+                  type: 'STRING' as const,
+                  description: 'What Patch should do or look up, in plain language.',
+                },
+              },
+              required: ['request'],
+            },
+            behavior: 'NON_BLOCKING' as const,
+          },
+        ]),
+    ...(lookBack
+      ? [
+          {
+            name: LOOK_BACK_TOOL_NAME,
+            description: LOOK_BACK_DESCRIPTION,
+            parameters: {
+              type: 'OBJECT' as const,
+              properties: {
+                query: {
+                  type: 'STRING' as const,
+                  description: 'A few key words to search the chat for.',
+                },
+              },
+              required: ['query'],
+            },
+            behavior: 'NON_BLOCKING' as const,
+          },
+        ]
+      : []),
+  ];
   return {
     setup: {
       model,
       generationConfig: { responseModalities: ['AUDIO'] },
       systemInstruction: {
-        parts: [{ text: withBriefing(hostedVoiceInstruction(handoff, true), briefing) }],
+        parts: [
+          {
+            text: withBriefing(
+              hostedVoiceInstruction(handoff, true) + (lookBack ? `\n\n${LOOK_BACK_RULE}` : ''),
+              briefing,
+            ),
+          },
+        ],
       },
-      // `never` has no agent, so no tool to call.
-      ...(handoff === 'never'
-        ? {}
-        : {
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: DISPATCH_TOOL_NAME,
-                    description: ASYNC_DISPATCH_TOOL_DESCRIPTION,
-                    parameters: {
-                      type: 'OBJECT',
-                      properties: {
-                        request: {
-                          type: 'STRING',
-                          description: 'What Patch should do or look up, in plain language.',
-                        },
-                      },
-                      required: ['request'],
-                    },
-                    behavior: 'NON_BLOCKING',
-                  },
-                ],
-              },
-            ],
-          }),
+      ...(declarations.length > 0 ? { tools: [{ functionDeclarations: declarations }] } : {}),
       inputAudioTranscription: {},
       outputAudioTranscription: {},
     },
@@ -496,7 +529,12 @@ export class GeminiLiveSession implements VoiceSessionLike {
     });
     ws.send(
       JSON.stringify(
-        buildSetupMessage(this.getEngineModel(), this.deps.handoff ?? 'auto', briefing),
+        buildSetupMessage(
+          this.getEngineModel(),
+          this.deps.handoff ?? 'auto',
+          briefing,
+          this.deps.lookBack !== undefined,
+        ),
       ),
     );
     await new Promise<void>((resolve) => this.setupCompleteWaiters.push(resolve));
@@ -604,6 +642,7 @@ export class GeminiLiveSession implements VoiceSessionLike {
       });
       for (const call of msg.toolCall.functionCalls) {
         if (call.name === DISPATCH_TOOL_NAME) void this.handleDispatch(call.id, call.args);
+        if (call.name === LOOK_BACK_TOOL_NAME) this.handleLookBack(call.id, call.args);
       }
     }
     if (msg.toolCallCancellation) {
@@ -832,13 +871,47 @@ export class GeminiLiveSession implements VoiceSessionLike {
 
   pushContext(role: 'user' | 'assistant', text: string): void {
     if (this.closed || !this.setupDone || !this.ws) return;
-    this.ws.send(
-      JSON.stringify({
+    // A short quiet note from the user's side, not the message replayed as if someone had said it.
+    this.sendFrame(
+      {
         clientContent: {
-          turns: [{ role: role === 'assistant' ? 'model' : 'user', parts: [{ text }] }],
+          turns: [{ role: 'user', parts: [{ text: liveNote(role, text) }] }],
           turnComplete: false,
         },
-      }),
+      },
+      'note: a message landed in the chat',
+      { from: role, chars: text.length },
+    );
+  }
+
+  /** The `look_back` tool: search the chat on the host and answer at once; no model, no wait. */
+  private handleLookBack(callId: string, args: Record<string, unknown> | undefined): void {
+    const query = typeof args?.['query'] === 'string' ? (args['query'] as string) : '';
+    let result: string;
+    try {
+      result = this.deps.lookBack!(this.currentChatId, query);
+    } catch (err) {
+      result = `Looking back failed: ${(err as Error).message}`;
+      this.deps.logger.error(
+        { sessionId: this.init.sessionId, err: (err as Error).message, query },
+        'gemini-live: look_back failed',
+      );
+    }
+    this.log('look_back', { callId, query, chars: result.length, result });
+    this.sendFrame(
+      {
+        toolResponse: {
+          functionResponses: [
+            {
+              id: callId,
+              name: LOOK_BACK_TOOL_NAME,
+              response: { result, scheduling: 'INTERRUPT' },
+            },
+          ],
+        },
+      },
+      'tool response (look_back)',
+      { callId },
     );
   }
 

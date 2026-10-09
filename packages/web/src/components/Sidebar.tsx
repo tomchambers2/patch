@@ -1964,6 +1964,7 @@ function ChatRowView({
 
   function applySnoozeUntil(snoozedUntil: number): void {
     const was = row.snoozedUntil;
+    navigateAfterArchive(navigate, [row.chatId]);
     useChatStore.getState().setSnoozed(row.chatId, snoozedUntil);
     void api.snoozeChat(row.chatId, snoozedUntil).catch((err) => {
       useChatStore.getState().setSnoozed(row.chatId, was);

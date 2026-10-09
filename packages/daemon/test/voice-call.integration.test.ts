@@ -158,6 +158,7 @@ function world(voiceConfig?: Partial<VoiceConfig>) {
         geminis.push(g);
         return g;
       } as unknown as new (url: string) => WsSocket,
+      lookBack: (chatId, query) => daemon.searchChat(chatId, query),
       makeTimeline: (init) => glue.makeTimeline(init),
       // What index.ts does for a hand-off: a tagged turn on the chat, answered when
       // that turn settles (not when sendInput returns: a queued message returns at once).
@@ -346,6 +347,39 @@ describe('a voice call, end to end', () => {
     await vi.waitFor(() => expect(results(c)).toHaveLength(1));
     expect(results(c)[0]).toContain('check the weather');
     expect(results(c)[0]).not.toContain('typed work');
+  });
+
+  it('look_back answers from what is actually in the chat, and from nothing else', async () => {
+    const chatId = await begin();
+    w.daemon.recordVoiceMessage({ chatId, role: 'user', content: 'why did the chat get archived' });
+    w.daemon.recordVoiceMessage({
+      chatId,
+      role: 'assistant',
+      content: 'a client on your IP sent the archive request',
+    });
+    w.daemon.recordVoiceMessage({ chatId, role: 'user', content: 'what is the weather' });
+    const c = await w.call(chatId);
+    const ask = (id: string, query: string): string => {
+      c.gemini.say({
+        toolCall: { functionCalls: [{ id, name: 'look_back', args: { query } }] },
+      });
+      const frame = c.gemini
+        .frames()
+        .find(
+          (f) =>
+            'toolResponse' in f &&
+            JSON.stringify(f).includes(`"id":"${id}"`) &&
+            JSON.stringify(f).includes('"name":"look_back"'),
+        );
+      return JSON.stringify(frame ?? {});
+    };
+    const hit = ask('lb-1', 'archived');
+    expect(hit).toContain('why did the chat get archived');
+    expect(hit).not.toContain('weather');
+    expect(ask('lb-2', 'zebra')).toContain('Nothing in this chat matches');
+    // Nothing of this ran an agent turn or cost the call anything but its voice.
+    c.hangUp();
+    await vi.waitFor(() => expect(w.banners()).toHaveLength(1));
   });
 
   it('leaves a banner for a call that handed nothing off', async () => {

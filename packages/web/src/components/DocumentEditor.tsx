@@ -4,7 +4,7 @@
 // user hasn't chosen "Open as source". The text is edited as-is: no HTML or
 // ProseMirror conversion on open or on save, so frontmatter, wrapping and
 // whitespace come back byte-identical unless the user types.
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { JSX } from 'react';
 
 export interface DocumentEditorProps {

@@ -1411,14 +1411,7 @@ export function ChatRoute({
     // this and calls `doSend` directly with the hooks it already has results
     // for, rather than asking the server to check the same message twice.
     setHookChecking(true);
-    let check;
-    try {
-      check = await api.checkHooks(chatId, message, files ?? []);
-    } catch (err) {
-      setHookChecking(false);
-      pushError(failed('hook check'), undefined, (err as Error).message);
-      return false;
-    }
+    const check = await api.checkHooks(chatId, message, files ?? []);
     setHookChecking(false);
     if (check.decision === 'block') {
       setHookBlock({ message, files: files ?? [], results: check.results });
@@ -1450,14 +1443,18 @@ export function ChatRoute({
       send: (e) => ws.send(e),
     });
     const advise = (Array.isArray(results) ? results : []).filter(
-      (r) => r.status === 'ok' && r.decision === 'advise',
+      (r) => r.status !== 'ok' || r.decision === 'advise',
     );
     if (advise.length > 0) {
       useChatStore.getState().patchLocalMessage(chatId, localId, {
         hookAdvise: advise.map((r) => ({
           hookId: r.hookId,
           hookName: r.hookName,
-          ...(r.analysis !== undefined ? { analysis: r.analysis } : {}),
+          ...(r.status !== 'ok'
+            ? { analysis: `Hook failed: ${r.error ?? r.status}` }
+            : r.analysis !== undefined
+              ? { analysis: r.analysis }
+              : {}),
         })),
       });
     }

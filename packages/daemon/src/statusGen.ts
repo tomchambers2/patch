@@ -24,7 +24,7 @@ export const STATUS_MODEL = 'claude-haiku-4-5-20251001';
 const STATUS_TIMEOUT_MS = 20_000;
 
 /** How much of the exchange to feed the summariser. */
-const MSG_SNIPPET_LEN = 600;
+const MSG_SNIPPET_LEN = 1500;
 
 /** Hard cap on the returned summary line. */
 const MAX_SUMMARY_LEN = 100;
@@ -92,25 +92,37 @@ export function parseStatus(raw: string): ChatStatusSummary | null {
   return { kind, summary: body };
 }
 
+/**
+ * The reply's END, not its start: a long reply states its outcome or asks its
+ * question last, and a head-only excerpt made the model describe the cut
+ * ("response cut off") instead of the agent.
+ */
+function tail(text: string): string {
+  const t = text.trim();
+  return t.length > MSG_SNIPPET_LEN ? t.slice(-MSG_SNIPPET_LEN) : t;
+}
+
 function buildPrompt(input: GenerateStatusInput): string {
   const user = input.lastUserMessage.slice(0, MSG_SNIPPET_LEN);
-  const reply = input.assistantReply.slice(0, MSG_SNIPPET_LEN);
+  const reply = tail(input.assistantReply);
   return [
     'You are summarising the CURRENT STATUS of an agent chat thread for a',
     'sidebar. Read the most recent exchange and decide whether the agent is now',
     'waiting on the user or has simply finished.',
     '',
     `Most recent user message: ${user}`,
-    `Most recent assistant reply (excerpt): ${reply}`,
+    `Most recent assistant reply (the final part of it): ${reply}`,
     '',
     'Reply with EXACTLY ONE line in the form `KIND: summary`, where KIND is:',
     '- QUESTION if the agent asked the user something / needs a decision or',
     '  input to continue (the thread is paused on the user).',
     '- COMPLETE if the agent finished its turn and nothing is outstanding (the',
     '  user could pick it back up any time, but nothing is required).',
-    'The summary is a concise phrase (max ~12 words) describing the current',
-    'status and any action the user must take. No markdown, no quotes, no',
-    'trailing punctuation.',
+    'The summary is a concise phrase (max ~12 words) saying what the agent did',
+    'or said and where things stand, plus any action the user must take. The',
+    'text above may begin mid-sentence because only the end is shown: never',
+    'mention truncation, excerpts, or the reply being cut off; describe the',
+    'agent. No markdown, no quotes, no trailing punctuation.',
   ].join('\n');
 }
 

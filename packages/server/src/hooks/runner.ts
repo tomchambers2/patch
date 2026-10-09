@@ -209,7 +209,18 @@ export class HookRunner {
           });
         },
       });
-      this.daemonLink.sendTo(ctx.daemonId, HOOK_CHECK_SURFACE_ID, event);
+      try {
+        this.daemonLink.sendTo(ctx.daemonId, HOOK_CHECK_SURFACE_ID, event);
+      } catch (err) {
+        clearTimeout(timer);
+        this.pending.delete(requestId);
+        resolve({
+          ...base,
+          status: 'failed',
+          error: `could not reach ${ctx.daemonId}: ${(err as Error).message}`,
+          durationMs: this.nowMs() - startedAt,
+        });
+      }
     });
   }
 }

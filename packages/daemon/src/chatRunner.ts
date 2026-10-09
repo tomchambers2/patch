@@ -6163,6 +6163,11 @@ export class Daemon {
     name: string | null;
     /** The first thing the user said in the chat, so a call knows how it began. */
     opening: string | null;
+    /** The one-line status the host last wrote for the chat, if it has one. */
+    status: string | null;
+    goal: string | null;
+    /** To-dos still to do, in order. */
+    openTodos: string[];
     turns: Array<{ role: 'user' | 'model'; text: string }>;
   } {
     const state = this.chatState.get(chatId);
@@ -6194,7 +6199,55 @@ export class Daemon {
         break;
       }
     }
-    return { name: meta.name ?? null, opening, turns };
+    return {
+      name: meta.name ?? null,
+      opening,
+      status: state.statusSummary,
+      goal: meta.goal ?? null,
+      openTodos: state.todos.filter((t) => t.status !== 'completed').map((t) => t.text),
+      turns,
+    };
+  }
+
+  /**
+   * spec/07 § Keeping voice and text as one conversation — a call's `look_back`: the messages
+   * in this chat that best match a few words, for a fast voice to answer from. Plain keyword
+   * matching over what the user and the agent said (no model, no cost): the messages that
+   * contain the most of the query's words win, newest first among equals, and come back
+   * oldest first, each shortened.
+   */
+  searchChat(chatId: string, query: string, limit = 5): string {
+    const meta = this.opts.metaStore.read(chatId);
+    if (!meta || !this.chatState.has(chatId)) throw new ChatNotFoundError(chatId);
+    const terms = [
+      ...new Set(
+        query
+          .toLowerCase()
+          .split(/[^\p{L}\p{N}]+/u)
+          .filter((w) => w.length >= 3),
+      ),
+    ];
+    if (terms.length === 0) return 'Give a few key words to look for.';
+    const branchId = meta.activeBranchId ?? this.branchIdFor(chatId);
+    const hits: Array<{ seq: number; role: string; text: string; score: number }> = [];
+    for (const rec of readTrack(this.chatLog, chatId, meta, branchId, -1)) {
+      const e = rec.event as WireEvent;
+      if (e.type !== 'chat.message' || (e.role !== 'user' && e.role !== 'assistant')) continue;
+      const text = stripVoiceTag(e.content).trim();
+      const lower = text.toLowerCase();
+      const score = terms.filter((t) => lower.includes(t)).length;
+      if (score > 0) hits.push({ seq: e.seq, role: e.role, text, score });
+    }
+    if (hits.length === 0) return `Nothing in this chat matches "${query}".`;
+    hits.sort((a, b) => b.score - a.score || b.seq - a.seq);
+    return hits
+      .slice(0, limit)
+      .sort((a, b) => a.seq - b.seq)
+      .map((h) => {
+        const flat = h.text.replace(/\s+/g, ' ');
+        return `${h.role === 'user' ? 'User' : 'Agent'}: ${flat.length > 400 ? `${flat.slice(0, 399).trimEnd()}…` : flat}`;
+      })
+      .join('\n');
   }
 
   private consumeVoiceExchanges(chatId: string): string {

@@ -14,6 +14,7 @@
 // `chatsInProject` (folder match, non-special, not already archived/deleted).
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '../stores/chatStore.js';
 import { useUiStore } from '../stores/uiStore.js';
 import { api } from '../api/rest.js';
@@ -21,6 +22,7 @@ import { useDismissOnClickOff } from '../lib/dismissOnClickOff.js';
 import { chatsInProject } from '../lib/chatGroups.js';
 import { SNOOZE_PRESETS } from '../lib/snoozePresets.js';
 import { failed } from '../lib/errorCopy.js';
+import { navigateAfterArchive } from '../lib/archiveNav.js';
 
 export function ProjectSnoozeMenu({ folder, name }: { folder: string; name: string }): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -29,6 +31,7 @@ export function ProjectSnoozeMenu({ folder, name }: { folder: string; name: stri
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const pushError = useUiStore((s) => s.pushError);
+  const navigate = useNavigate();
 
   useDismissOnClickOff(open, [menuRef, triggerRef], () => close());
 
@@ -55,6 +58,10 @@ export function ProjectSnoozeMenu({ folder, name }: { folder: string; name: stri
     close();
     const targets = chatsInProject(Object.values(useChatStore.getState().chats), folder);
     const store = useChatStore.getState();
+    navigateAfterArchive(
+      navigate,
+      targets.map((c) => c.chatId),
+    );
     for (const c of targets) {
       const previous = c.snoozedUntil;
       store.setSnoozed(c.chatId, snoozedUntil);

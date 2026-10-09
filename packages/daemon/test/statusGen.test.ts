@@ -125,6 +125,26 @@ describe('makeStatusGenerator', () => {
     expect(opts?.prompt).toContain(baseInput.assistantReply);
   });
 
+  it('feeds the END of a long reply (where the outcome is) and forbids talking about truncation', async () => {
+    const sdk = createMockSdkBackend();
+    sdk.enqueue([
+      { type: 'assistant', content: 'COMPLETE: Refactored auth module, tests pass' },
+      { type: 'result', sessionId: 'sess-1' },
+    ]);
+    const gen = makeStatusGenerator({
+      sdkBackend: sdk,
+      runOnAccountWithCredit: runWith(okOAuth),
+      logger: silent,
+    });
+    const long = `START-MARKER ${'filler '.repeat(800)} FINAL-OUTCOME: shipped and green`;
+    await gen({ ...baseInput, assistantReply: long });
+    const prompt = sdk.lastOptions()?.prompt ?? '';
+    expect(prompt).toContain('FINAL-OUTCOME: shipped and green');
+    expect(prompt).not.toContain('START-MARKER');
+    expect(prompt).toMatch(/never\s+(mention|say)[^.]*(cut|truncat|excerpt)/i);
+    expect(prompt).toMatch(/what the agent (did|said)/i);
+  });
+
   it('falls back to assembled delta text when no final assistant message arrives', async () => {
     const sdk = createMockSdkBackend();
     sdk.enqueue([

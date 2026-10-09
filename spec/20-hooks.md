@@ -195,9 +195,10 @@ daemon-link, `03-wire-protocol.md` § Hooks), each bounded by its own
 ```
 
 `decision` is the response's own aggregate: `block` whenever any result is a
-`block` **or** failed/timed out (both hold the message — a failed hook is
-never silently equivalent to a pass), else `advise` when any result is an
-`advise`, else `pass`. `results` carries every matching hook's own outcome —
+`block`; else `advise` when any result is an `advise` **or** failed/timed
+out (a failed hook never holds the message, but is never silently equivalent
+to a pass either); else `pass`. A hook must never block a send except by a
+genuine `block`. `results` carries every matching hook's own outcome —
 including its own `status` — so a client can tell a genuine block from a
 broken hook and render each one's card correctly, and a block from one hook
 is shown alongside an advise from another rather than the other's note being
@@ -249,10 +250,10 @@ both are host ↔ server only.
   the send button's idle state, disabled, so a wait is never a silent one.
   Hooks run in parallel server-side, so this is bounded by the slowest
   matching hook's own timeout, not their sum. The client also gives up after
-  20 seconds if the server never answers, clearing Checking… and showing a
-  "hook check failed" error so the user can retry. A 502/503/504 (the proxy in front of the server,
-  typically mid-restart) reads "Patch server unreachable (HTTP n) … Your message
-  was not sent; try again", never a bare status code. Which hooks matched is not known
+  20 seconds if the server never answers. Whenever the check itself can't
+  complete (timeout, 502/503/504, any request error, an unprepareable image)
+  the message is sent anyway with a "Hook failed: <reason>" note attached,
+  never a bare status code and never a held message. Which hooks matched is not known
   client-side until the response lands — the card/note that follows is where
   each hook is named.
 - **Pass** (every result is `pass`): nothing shows. The message sends exactly
@@ -273,10 +274,9 @@ both are host ↔ server only.
     the one that was overridden.
   - A card with more than one blocking hook stacks them; Send anyway skips
     all of them for this one send.
-- A hook that **failed or timed out** is shown on the card with its error
-  instead of an analysis, and offers Send / Edit (no suggestion, since the
-  hook never produced one). Never sent silently, never dropped silently — a
-  broken hook is exactly as visible as a working one that blocked.
+- A hook that **failed or timed out** does not hold the message: it sends,
+  with a "Hook failed: <error>" note attached like an advise. A broken hook
+  is exactly as visible as a working one, but never in the way.
 - Checking is per-message, not per-keystroke: it runs once, when the user
   commits a send, not while they are still typing.
 

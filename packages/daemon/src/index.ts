@@ -4337,7 +4337,7 @@ export async function main(testHooks?: MainTestHooks): Promise<void> {
     // whose history cannot be read fails the session loudly rather than
     // opening a voice that knows nothing.
     getChatContext: (chatId: string) => {
-      const { name, opening, turns } = daemon.voiceContext(chatId, {
+      const { name, opening, status, goal, openTodos, turns } = daemon.voiceContext(chatId, {
         maxChars: VOICE_CONTEXT_MAX_CHARS,
       });
       // Header lines for the call's briefing: what the chat is called and how it began.
@@ -4354,8 +4354,21 @@ export async function main(testHooks?: MainTestHooks): Promise<void> {
             ]
           : []),
       ];
-      return [...header, ...turns];
+      // Where it stands now: the status the host already writes after each turn, the goal and
+      // the open to-dos. Nothing new is generated for a call.
+      const standing = [
+        ...(status !== null
+          ? [{ role: 'user' as const, text: `(Where it stands: ${status})` }]
+          : []),
+        ...(goal !== null ? [{ role: 'user' as const, text: `(Goal: ${goal})` }] : []),
+        ...(openTodos.length > 0
+          ? [{ role: 'user' as const, text: `(Still to do: ${openTodos.slice(0, 6).join('; ')})` }]
+          : []),
+      ];
+      return [...header, ...standing, ...turns];
     },
+    // A call's `look_back`: the chat's messages that match a few words, searched on the host.
+    lookBack: (chatId, query) => daemon.searchChat(chatId, query),
     makeTimeline: (init) => chatVoice.makeTimeline(init),
     onCallEnded: (info) => chatVoice.callEnded(info),
   });

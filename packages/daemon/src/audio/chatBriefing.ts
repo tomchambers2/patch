@@ -50,3 +50,27 @@ export function chatBriefing(turns: BriefingTurn[]): string {
 export function withBriefing(instruction: string, briefing: string): string {
   return briefing === '' ? instruction : `${instruction}\n\n${briefing}`;
 }
+
+/** The tool a fast voice calls to find earlier messages in the chat that the briefing leaves out. */
+export const LOOK_BACK_TOOL_NAME = 'look_back';
+
+export const LOOK_BACK_DESCRIPTION =
+  'Search this chat for earlier messages about something the background does not cover. Give a ' +
+  'few key words from the question. It returns the matching messages; no work is done.';
+
+/** The line in the voice's instructions that tells it when to look back. */
+export const LOOK_BACK_RULE =
+  `Before saying you do not know something about earlier in this chat, call ${LOOK_BACK_TOOL_NAME} ` +
+  'with a few key words from the question and answer from what it returns. The background above ' +
+  'is only the gist.';
+
+/**
+ * What the voice is told when a message lands in the chat mid-call: one short, quiet note, never
+ * the message itself in full and never as if the voice had said it. Changing the top of the
+ * instructions would break the provider's input caching, so changes are only ever added at the end.
+ */
+export function liveNote(role: 'user' | 'assistant', text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const short = flat.length > 400 ? `${flat.slice(0, 399).trimEnd()}…` : flat;
+  return `(Note, not for you to answer: ${role === 'user' ? 'the user typed in the chat' : 'the agent wrote in the chat'}: "${short}")`;
+}
