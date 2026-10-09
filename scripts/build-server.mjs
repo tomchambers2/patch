@@ -59,8 +59,15 @@ export function buildServerRelease({ root, info, out, reuseServer = null, log = 
 
   // The SPA and the server both resolve @patch/wire (and the server @patch/auth)
   // through their dist, which a fresh checkout does not have.
-  log('release → building @patch/wire + @patch/auth');
-  sh('pnpm', ['--filter', '@patch/wire', '--filter', '@patch/auth', 'build'], { cwd: root });
+  // The server imports @patch/relay (and its /host entry) too, and tsc needs its
+  // built declarations; a deploy builds everything first and so never noticed
+  // that this script, run on its own, did not.
+  log('release → building @patch/wire + @patch/auth + @patch/relay');
+  sh(
+    'pnpm',
+    ['--filter', '@patch/wire', '--filter', '@patch/auth', '--filter', '@patch/relay', 'build'],
+    { cwd: root },
+  );
   log(`release → building SPA ${info.version} / ${info.gitSha}`);
   sh('pnpm', ['--filter', '@patch/web', 'build'], {
     cwd: root,
