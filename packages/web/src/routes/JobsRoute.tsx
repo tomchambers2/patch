@@ -188,7 +188,7 @@ export function JobsRoute(): JSX.Element {
     return (
       <div className="route-error" data-testid="jobs-error">
         Failed to load jobs: {(error as Error).message}
-        <button type="button" onClick={() => refetch()}>
+        <button type="button" className="secondary-btn" onClick={() => refetch()}>
           Retry
         </button>
       </div>

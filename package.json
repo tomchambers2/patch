@@ -1,7 +1,7 @@
 {
   "name": "patch",
   "// version": "Headline <major>.<minor> only — the effective build version is major.minor.<commit count>, computed by scripts/version.mjs. Bump this by hand for a new headline number.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "description": "Patch — thin coordination layer over Claude Code (monorepo root)",

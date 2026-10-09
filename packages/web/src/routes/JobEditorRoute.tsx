@@ -1435,7 +1435,9 @@ export function JobEditorRoute({ jobId }: { jobId?: string } = {}): JSX.Element 
             />
           </label>
           <label>
-            Group <span className="form-group-opt">· optional</span>
+            <span>
+              Group <span className="form-group-opt">· optional</span>
+            </span>
             <select
               value={groupIsAdHoc ? NEW_GROUP : form.group}
               onChange={(e) => {

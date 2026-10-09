@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { JSX } from 'react';
-import { render as rtlRender, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import {
+  render as rtlRender,
+  screen,
+  fireEvent,
+  cleanup,
+  within,
+  act,
+} from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ChatHeader } from '../components/ChatHeader.js';
 import { ConfirmModal } from '../components/ConfirmModal.js';
@@ -100,6 +107,31 @@ describe('ChatHeader', () => {
   });
   afterEach(() => {
     cleanup();
+  });
+
+  it('shows a workers pill for running patch_delegate subagents only, and drops it when they finish', () => {
+    const send = (id: string, status: 'running' | 'done', seq: number): void => {
+      act(() => {
+        useChatStore.getState().applyEvent({
+          type: 'chat.delegate_update',
+          chatId: 'c1',
+          delegateId: id,
+          label: `job ${id}`,
+          status,
+          seq,
+        } as never);
+      });
+    };
+    render(<ChatHeader row={row()} />);
+    expect(screen.queryByTestId('header-workers')).toBeNull();
+    send('a', 'running', 1);
+    expect(screen.getByTestId('header-workers').textContent).toBe('1 worker');
+    send('b', 'running', 2);
+    expect(screen.getByTestId('header-workers').textContent).toBe('2 workers');
+    expect(screen.getByTestId('header-workers').getAttribute('title')).toBe('job a\njob b');
+    send('a', 'done', 3);
+    send('b', 'done', 4);
+    expect(screen.queryByTestId('header-workers')).toBeNull();
   });
 
   it('the ⋯ menu offers Move to…, which opens the Move dialog (spec/04 § Moving a chat)', () => {

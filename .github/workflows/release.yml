@@ -7,10 +7,9 @@
 # Clients pull from the release; nothing here depends on any one person's
 # machine being awake.
 #
-# STATE: manual only. The push and tag triggers are commented out on purpose
-# until the repo is public. Actions minutes are free for public repos only, and
-# the macOS runners this will need are billed at a multiple on a private one.
-# Switch the triggers on when the repo goes public.
+# Runs only in the project's public repository (every job is guarded below), so a
+# private fork or the development repo never spends minutes on it. Actions
+# minutes are free for public repos only.
 #
 # BUILT SO FAR: the server and web release (the part anyone self-hosting runs)
 # the Linux host artifacts (x64 and arm64), signed with the artifact key, and
@@ -34,9 +33,9 @@ on:
         type: choice
         options: [dev, stable]
         default: dev
-  # push:
-  #   branches: [main]
-  #   tags: ['v*']
+  push:
+    branches: [main]
+    tags: ['v*']
 
 permissions:
   contents: write
@@ -47,6 +46,7 @@ concurrency:
 
 jobs:
   server:
+    if: github.repository == 'tomchambers2/patch'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -81,6 +81,7 @@ jobs:
             dist/server/install.sh
 
   host:
+    if: github.repository == 'tomchambers2/patch'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -128,6 +129,7 @@ jobs:
             ${{ runner.temp }}/out/daemon-latest-*.json
 
   android:
+    if: github.repository == 'tomchambers2/patch'
     runs-on: ubuntu-latest
     outputs:
       apk: ${{ steps.build.outputs.apk }}
@@ -195,6 +197,7 @@ jobs:
             ${{ runner.temp }}/apk/android-latest.json
 
   publish:
+    if: github.repository == 'tomchambers2/patch'
     needs: [server, host, android]
     runs-on: ubuntu-latest
     steps:
@@ -212,7 +215,13 @@ jobs:
           set -euo pipefail
           if [ "$CHANNEL" = stable ]; then
             tag="$REF_NAME"
-            case "$tag" in v[0-9]*) ;; *) echo "a stable release needs a vX.Y.Z tag, got '$tag'" >&2; exit 1 ;; esac
+            # The artifacts are stamped with the version this commit builds, so the
+            # tag has to say the same thing or a release would name one version
+            # and install another.
+            if [ "$tag" != "v$VERSION" ]; then
+              echo "this commit builds version $VERSION; tag it v$VERSION (got '$tag')" >&2
+              exit 1
+            fi
             flags=(--generate-notes)
           else
             tag="dev-$VERSION"

@@ -21,14 +21,14 @@ function body(selector: string): string {
   return css.slice(open + 1, close).replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-describe('the collapsed tool-run summary row', () => {
-  it('keeps the code font for tool rows in general', () => {
-    expect(body('.tool-group')).toMatch(/JetBrains Mono/);
-  });
-
-  it('overrides back to the body font for its own one-line description', () => {
-    const rule = body('.tool-group .tool-summary-text');
+describe('tool rows', () => {
+  it('read in the body font, not code', () => {
+    const rule = body('.tool-call,\n.tool-result,\n.tool-group');
     expect(rule).not.toMatch(/JetBrains Mono/);
     expect(rule).toMatch(/Figtree Variable/);
+  });
+
+  it('keep the code font only for the expanded args and results', () => {
+    expect(body('.tool-detail')).toMatch(/JetBrains Mono/);
   });
 });

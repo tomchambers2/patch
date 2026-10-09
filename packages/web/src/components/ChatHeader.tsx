@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { usePresenceStore } from '../stores/presenceStore.js';
-import { useChatStore } from '../stores/chatStore.js';
+import { useChatStore, type DelegateUpdateInfo } from '../stores/chatStore.js';
 import { clearComposerDraft } from '../stores/composerDraftStore.js';
 import { api } from '../api/rest.js';
 import { useUiStore } from '../stores/uiStore.js';
@@ -104,6 +104,30 @@ function FinishedGoalIndicator({ lastGoal }: { lastGoal: FinishedGoal }): JSX.El
           <div>{lastGoal.reason}</div>
         </div>
       ) : null}
+    </span>
+  );
+}
+
+const NO_DELEGATES: Record<string, DelegateUpdateInfo> = {};
+
+/**
+ * spec/14 § Chat panel header — Background workers: a count pill while any
+ * `patch_delegate` subagent of this chat is running or awaiting permission,
+ * so the work stays visible without scrolling to the strip above the composer.
+ */
+function WorkersIndicator({ chatId }: { chatId: string }): JSX.Element | null {
+  const updates = useChatStore((s) => s.delegateUpdates[chatId] ?? NO_DELEGATES);
+  const running = Object.values(updates).filter(
+    (d) => d.status === 'running' || d.status === 'awaiting-permission',
+  );
+  if (running.length === 0) return null;
+  return (
+    <span
+      className="workers-pill"
+      data-testid="header-workers"
+      title={running.map((d) => d.label).join('\n')}
+    >
+      {running.length} {running.length === 1 ? 'worker' : 'workers'}
     </span>
   );
 }
@@ -387,6 +411,7 @@ export function ChatHeader({ row }: { row: ChatRow }): JSX.Element {
                 ! waiting on you
               </span>
             ) : null}
+            <WorkersIndicator chatId={row.chatId} />
             {row.goal === null && row.lastGoal !== null ? (
               <FinishedGoalIndicator lastGoal={row.lastGoal} />
             ) : null}

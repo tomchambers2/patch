@@ -1055,6 +1055,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         case 'chat.tool_call': {
           const row = ensureRow(event.chatId);
           chats[event.chatId] = { ...row, lastSeq: Math.max(row.lastSeq, event.seq) };
+          // callId is the identity of a call: a re-delivered replay (or a second
+          // delivery at another seq) must not add a second row.
+          if (
+            (timelines[event.chatId] ?? []).some(
+              (e) => e.kind === 'tool_call' && e.callId === event.callId,
+            )
+          )
+            break;
           pushTimeline(event.chatId, {
             seq: event.seq,
             kind: 'tool_call',
@@ -1068,6 +1076,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         case 'chat.tool_result': {
           const row = ensureRow(event.chatId);
           chats[event.chatId] = { ...row, lastSeq: Math.max(row.lastSeq, event.seq) };
+          if (
+            (timelines[event.chatId] ?? []).some(
+              (e) => e.kind === 'tool_result' && e.callId === event.callId,
+            )
+          )
+            break;
           pushTimeline(event.chatId, {
             seq: event.seq,
             kind: 'tool_result',

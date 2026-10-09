@@ -878,6 +878,13 @@ function ChatDetailBody(): React.ReactElement {
   // header (§ header layout above), with no way to read the rest of a long
   // one. Opens the full text in a modal instead of growing the header.
   const [titleModalOpen, setTitleModalOpen] = React.useState(false);
+  // spec/15 § Chat detail — header workers pill: running `patch_delegate` subagents.
+  const runningWorkers = useChatStore(
+    (s) =>
+      Object.values(s.delegateUpdates[chatId] ?? {}).filter(
+        (d) => d.status === 'running' || d.status === 'awaiting-permission',
+      ).length,
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.paper }}>
@@ -939,6 +946,22 @@ function ChatDetailBody(): React.ReactElement {
             {title}
           </Text>
         </Pressable>
+        {runningWorkers > 0 ? (
+          <View
+            testID="header-workers"
+            style={{
+              backgroundColor: colors.lineSoft,
+              paddingHorizontal: space.sm,
+              paddingVertical: 2,
+              borderRadius: radii.pill,
+              marginRight: space.sm,
+            }}
+          >
+            <Text style={{ ...typography.meta, fontFamily: fonts.bodyMedium, color: colors.ink2 }}>
+              {runningWorkers} {runningWorkers === 1 ? 'worker' : 'workers'}
+            </Text>
+          </View>
+        ) : null}
         {row?.awaitingPermission ? (
           <View
             style={{

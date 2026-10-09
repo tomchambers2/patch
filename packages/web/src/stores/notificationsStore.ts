@@ -3,6 +3,7 @@
 // NO FALLBACK: a failed load leaves `error` set for the bell to show, rather
 // than presenting an empty list as the truth.
 
+import { useEffect } from 'react';
 import { create } from 'zustand';
 import { api, type NotificationEntry } from '../api/rest.js';
 
@@ -35,3 +36,28 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
     }
   },
 }));
+
+/** True when the chat has at least one unread agent notification (spec/09 § bell). */
+export function useChatHasUnread(chatId: string): boolean {
+  return useNotificationsStore((s) =>
+    s.items.some((n) => n.chatId === chatId && n.readAt === null),
+  );
+}
+
+/**
+ * Looking at a chat reads its notifications (spec/09 § bell): while `chatId`
+ * is on screen, any unread entry for it — already there or arriving live — is
+ * marked read.
+ */
+export function useMarkChatNotificationsRead(chatId: string): void {
+  const ids = useNotificationsStore((s) =>
+    s.items
+      .filter((n) => n.chatId === chatId && n.readAt === null)
+      .map((n) => n.id)
+      .join(','),
+  );
+  useEffect(() => {
+    if (ids === '') return;
+    void useNotificationsStore.getState().markRead({ ids: ids.split(',') });
+  }, [ids]);
+}

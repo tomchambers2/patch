@@ -2534,7 +2534,7 @@ export async function main(testHooks?: MainTestHooks): Promise<void> {
             ...(event.voicePrefix !== undefined ? { voicePrefix: event.voicePrefix } : {}),
             origin: 'machine',
             // The Manager's sweep reaches a remote chat through this same relay.
-            ...(event.sourceChatId === 'thread_manager' ? { nudge: true } : {}),
+            ...(event.sourceChatId === 'thread_manager' ? { nudge: true } : { fromAgent: true }),
           })
           .then(() => {
             sender({

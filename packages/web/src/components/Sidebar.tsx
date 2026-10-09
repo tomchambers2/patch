@@ -53,6 +53,7 @@ import {
   PanelRightOpen,
   Target,
   Layers,
+  Bell,
 } from 'lucide-react';
 import { CloseIcon, DeleteIcon } from './icons.js';
 import {
@@ -109,6 +110,7 @@ import {
 import { ContextMenu, useContextMenu, type ContextMenuItem } from './ContextMenu.js';
 import { DevSourceBadge } from './DevSourceBadge.js';
 import { NotificationBell } from './NotificationBell.js';
+import { useChatHasUnread } from '../stores/notificationsStore.js';
 import { shortcutLabel, shortcutTitle } from '../lib/shortcuts.js';
 import { NewChatSplit } from './NewChatSplit.js';
 import { failed } from '../lib/errorCopy.js';
@@ -1834,6 +1836,7 @@ function ChatRowView({
   automations?: boolean;
 }): JSX.Element {
   const badge = useSettledBadge(row);
+  const hasUnreadNotif = useChatHasUnread(row.chatId);
   const navigate = useNavigate();
   const menu = useContextMenu();
   // Multi-select (spec/14 § Sidebar → Selecting multiple rows). Only ordinary
@@ -2174,8 +2177,16 @@ function ChatRowView({
           width and the relative time stays readable. Only a pinned-or-goal
           row takes the nested shape — an ordinary row keeps the plain text
           node. */}
-        {pinned || row.goal !== null ? (
+        {pinned || row.goal !== null || hasUnreadNotif ? (
           <span className="name has-marks">
+            {hasUnreadNotif && (
+              <Bell
+                className="name-bell"
+                data-testid={`name-bell-${row.chatId}`}
+                size={11}
+                aria-label="unread notification"
+              />
+            )}
             {pinned && (
               <Pin
                 className="name-pin"

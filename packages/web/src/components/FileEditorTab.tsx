@@ -547,61 +547,66 @@ function PlainFileEditor({
         </div>
       ) : (
         <>
-          <Suspense fallback={<div data-testid="browse-loading">Loading…</div>}>
-            {diffToggle === 'git' || diffToggle === 'agent' ? (
-              <InlineDiffView
-                path={name}
-                original={(diffToggle === 'git' ? headPlan?.original : agentPlan?.original) ?? ''}
-                modified={fileContent?.content ?? ''}
-              />
-            ) : diffToggle === 'suggestions' && docView ? (
-              <SuggestionsPanel view={docView} dispatch={docDispatch} />
-            ) : diffToggle === 'comments' && docView ? (
-              <CommentsPanel view={docView} dispatch={docDispatch} />
-            ) : diffToggle === 'history' && docView ? (
-              <HistoryPanel view={docView} dispatch={docDispatch} />
-            ) : isMarkdownPath(name) && !openAsSource ? (
-              <DocumentEditor
-                docKey={path}
-                value={draft ?? fileContent?.content ?? ''}
-                onChange={recordDraftChange}
-                onAsk={(text) => {
-                  quoteSelectionIntoComposer(chatId, text);
-                  onNotice('Added to the composer');
-                }}
-                onComment={(anchor, text) => {
-                  void docDispatch({ op: 'add_comment', anchor, text });
-                  onNotice('Comment added');
-                }}
-              />
-            ) : (
-              <Editor
-                value={draft ?? fileContent?.content ?? ''}
-                language={inferLanguage(name)}
-                theme={MONACO_THEME}
-                options={{
-                  minimap: { enabled: false },
-                  automaticLayout: true,
-                  ...editorOptionsFor(inferLanguage(name)),
-                }}
-                onChange={(v) => recordDraftChange(v ?? '')}
-                loading={<div data-testid="browse-loading">Loading…</div>}
-              />
-            )}
-          </Suspense>
-          {contentPending ? (
-            <div className="browse-content-loading" data-testid="browse-content-loading">
-              <BrowseSkeleton rows={8} testId="browse-content-skeleton" />
-            </div>
-          ) : null}
-          {contentFailed ? (
-            <div className="browse-content-error" data-testid="browse-content-error" role="alert">
-              <span className="browse-content-error-path">{path}</span>
-              <span className="browse-content-error-msg">
-                {(fileContentError as Error).message}
-              </span>
-            </div>
-          ) : null}
+          {/* The editor body — the box the loading and error overlays cover.
+              Without it they covered the whole tab, header included, and the
+              error's path printed over the header's own. */}
+          <div className="browse-body">
+            <Suspense fallback={<div data-testid="browse-loading">Loading…</div>}>
+              {diffToggle === 'git' || diffToggle === 'agent' ? (
+                <InlineDiffView
+                  path={name}
+                  original={(diffToggle === 'git' ? headPlan?.original : agentPlan?.original) ?? ''}
+                  modified={fileContent?.content ?? ''}
+                />
+              ) : diffToggle === 'suggestions' && docView ? (
+                <SuggestionsPanel view={docView} dispatch={docDispatch} />
+              ) : diffToggle === 'comments' && docView ? (
+                <CommentsPanel view={docView} dispatch={docDispatch} />
+              ) : diffToggle === 'history' && docView ? (
+                <HistoryPanel view={docView} dispatch={docDispatch} />
+              ) : isMarkdownPath(name) && !openAsSource ? (
+                <DocumentEditor
+                  docKey={path}
+                  value={draft ?? fileContent?.content ?? ''}
+                  onChange={recordDraftChange}
+                  onAsk={(text) => {
+                    quoteSelectionIntoComposer(chatId, text);
+                    onNotice('Added to the composer');
+                  }}
+                  onComment={(anchor, text) => {
+                    void docDispatch({ op: 'add_comment', anchor, text });
+                    onNotice('Comment added');
+                  }}
+                />
+              ) : (
+                <Editor
+                  value={draft ?? fileContent?.content ?? ''}
+                  language={inferLanguage(name)}
+                  theme={MONACO_THEME}
+                  options={{
+                    minimap: { enabled: false },
+                    automaticLayout: true,
+                    ...editorOptionsFor(inferLanguage(name)),
+                  }}
+                  onChange={(v) => recordDraftChange(v ?? '')}
+                  loading={<div data-testid="browse-loading">Loading…</div>}
+                />
+              )}
+            </Suspense>
+            {contentPending ? (
+              <div className="browse-content-loading" data-testid="browse-content-loading">
+                <BrowseSkeleton rows={8} testId="browse-content-skeleton" />
+              </div>
+            ) : null}
+            {contentFailed ? (
+              <div className="browse-content-error" data-testid="browse-content-error" role="alert">
+                <span className="browse-content-error-path">{path}</span>
+                <span className="browse-content-error-msg">
+                  {(fileContentError as Error).message}
+                </span>
+              </div>
+            ) : null}
+          </div>
           <footer className="browse-actions" data-testid="browse-actions">
             <button
               type="button"

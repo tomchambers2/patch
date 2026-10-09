@@ -33,3 +33,51 @@ describe('notificationsStore', () => {
     expect(useNotificationsStore.getState().unread).toBe(0);
   });
 });
+
+describe('viewing a chat', async () => {
+  const { renderHook, act } = await import('@testing-library/react');
+  const { useMarkChatNotificationsRead, useChatHasUnread } =
+    await import('../stores/notificationsStore.js');
+  const entry = (id: string, chatId: string, readAt: number | null) => ({
+    id,
+    chatId,
+    message: id,
+    importance: 'normal',
+    sentAt: 1,
+    readAt,
+  });
+
+  beforeEach(() => {
+    markNotificationsRead.mockReset();
+    markNotificationsRead.mockResolvedValue({ items: [], unread: 0 });
+  });
+
+  it('reports unread only for the chat that has one', () => {
+    useNotificationsStore.setState({
+      items: [entry('a', 'c1', null), entry('b', 'c2', 5)] as never,
+    });
+    expect(renderHook(() => useChatHasUnread('c1')).result.current).toBe(true);
+    expect(renderHook(() => useChatHasUnread('c2')).result.current).toBe(false);
+  });
+
+  it("marks the viewed chat's unread entries read, and ones that arrive later", async () => {
+    useNotificationsStore.setState({
+      items: [entry('a', 'c1', null), entry('b', 'c2', null)] as never,
+    });
+    renderHook(() => useMarkChatNotificationsRead('c1'));
+    expect(markNotificationsRead).toHaveBeenCalledWith({ ids: ['a'] });
+    await act(async () => {
+      useNotificationsStore.setState({
+        items: [entry('c', 'c1', null), entry('b', 'c2', null)] as never,
+      });
+    });
+    expect(markNotificationsRead).toHaveBeenLastCalledWith({ ids: ['c'] });
+    expect(markNotificationsRead).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves other chats alone', () => {
+    useNotificationsStore.setState({ items: [entry('b', 'c2', null)] as never });
+    renderHook(() => useMarkChatNotificationsRead('c1'));
+    expect(markNotificationsRead).not.toHaveBeenCalled();
+  });
+});

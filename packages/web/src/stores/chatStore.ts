@@ -2228,11 +2228,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // a SECOND time at the tail via `pushTimeline`, landing after whatever
           // later messages had already been (correctly) deduped back into their
           // original position — a tool call rendering out of message order. The
-          // canonical seq + callId is the identity, exactly as for chat.message.
+          // callId is the identity of a call (a second delivery at another seq is
+          // still the same call, not a second row).
           const cur = timelines[event.chatId] ?? [];
-          const already = cur.some(
-            (e) => e.kind === 'tool_call' && e.seq === event.seq && e.callId === event.callId,
-          );
+          const already = cur.some((e) => e.kind === 'tool_call' && e.callId === event.callId);
           if (already) break;
           chats[event.chatId] = {
             ...chats[event.chatId]!,

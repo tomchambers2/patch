@@ -265,7 +265,7 @@ export function AddClaudeAccount(): JSX.Element {
   const hosts = usePresenceStore((s) => s.hosts);
   const online = sortHosts(Object.values(hosts)).filter((h) => h.online);
   return (
-    <div className="set-inline">
+    <div className="set-inline set-add-bar start">
       <button
         type="button"
         className="set-btn"
@@ -341,7 +341,7 @@ export function AddChatGPTAccount(): JSX.Element {
   };
 
   return (
-    <div className="set-row stack" data-testid="add-chatgpt-account">
+    <div className="set-add-bar start stack" data-testid="add-chatgpt-account">
       <div className="set-inline">
         <button
           type="button"

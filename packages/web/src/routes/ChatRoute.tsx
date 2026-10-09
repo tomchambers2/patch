@@ -16,6 +16,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useMarkChatNotificationsRead } from '../stores/notificationsStore.js';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { sendToNewChat, selectionWithin } from '../lib/sendToNewChat.js';
 import { useQuery } from '@tanstack/react-query';
@@ -364,6 +365,7 @@ export function ChatRoute({
       : initialSeq === null
         ? null
         : String(initialSeq);
+  useMarkChatNotificationsRead(chatId);
   const row = useChatStore((s) => s.chats[chatId]);
   const setActiveChat = useChatStore((s) => s.setActiveChat);
   const addLocalMessage = useChatStore((s) => s.addLocalMessage);
@@ -3229,9 +3231,9 @@ function ToolCall({
   // opens the file's diff, so it must name the file even when the model wrote
   // a description. The rest of the args still live only in the expanded detail.
   const summary = isEdit
-    ? `${entry.tool} ${String(args.file_path)}`
+    ? `Editing ${String(args.file_path)}`
     : entry.tool === 'TaskStop'
-      ? `TaskStop · ${String(args['task_id'] ?? args['taskId'] ?? '')}`
+      ? `Stopping task ${String(args['task_id'] ?? args['taskId'] ?? '')}`
       : toolCallSummary(entry.tool, entry.toolArgs);
 
   // spec/09 § `### push`, spec/14 ## Main chat panel — every `patch_notify`

@@ -167,10 +167,10 @@
   --ink: #efede9;
   --ink-2: #c6c2ba;
   --ink-3: #928d84;
-  --ink-faint: #6c6862;
+  --ink-faint: #817c75;
 
-  --line: #38352f;
-  --line-soft: #2a2724;
+  --line: #4a463f;
+  --line-soft: #3e3a34;
   --table-border: var(--ink-3);
   --table-head: #433f3a;
   --table-stripe: #353330;
@@ -239,10 +239,17 @@
     --ink: #efede9;
     --ink-2: #c6c2ba;
     --ink-3: #928d84;
-    --ink-faint: #6c6862;
+    /* Was #6c6862 — 2.6:1 on --bg-elevated, so the hover timestamps and
+       meeting/pad times set in it were near-invisible in dark while light
+       sat at ~3.7:1. Lifted to match light, still a clear step below ink-3. */
+    --ink-faint: #817c75;
 
-    --line: #38352f;
-    --line-soft: #2a2724;
+    /* Hairlines lifted to the same strength as light's (--line 1.5:1,
+       --line-soft 1.3:1 on --bg-elevated). They were 1.16:1 and 1.05:1 — the
+       soft one darker than the card it divides — so settings rows, input and
+       button outlines all but vanished in dark. */
+    --line: #4a463f;
+    --line-soft: #3e3a34;
     --table-border: var(--ink-3);
     --table-head: #433f3a;
     --table-stripe: #353330;
@@ -1284,6 +1291,10 @@ body {
   flex: 0 0 auto;
   color: var(--accent-strong);
 }
+.name-bell {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+}
 .goal-marker {
   display: inline-flex;
   flex: 0 0 auto;
@@ -1752,6 +1763,14 @@ a.ch-row:hover {
 .sidebar-view-option-label {
   flex: 1;
 }
+/* A sort group's heading. Sized and inset with the options it labels — it
+   used to borrow the option-label class and so render at body size, larger
+   than its own options and 2px off their left edge. */
+.sidebar-view-group-label {
+  padding: 8px 8px 2px;
+  font-size: var(--text-min);
+  color: var(--ink-3);
+}
 .sidebar-view-option-count {
   /* Never shrinks — a truncated number reads as the wrong number. */
   flex: 0 0 auto;
@@ -1838,6 +1857,49 @@ a.ch-row:hover {
 }
 .batch-summary.all-ready {
   color: var(--accent-strong);
+}
+/* The empty panel's check-in choices and the live panel's check-in line.
+   These replaced the old interval stepper (.batch-interval) without styles of
+   their own, so the choices ran together as bare text ("15 min20 min…") and
+   the check-in line sat flush to the sidebar edge. Inset with the rows below
+   (--sb-inset + 8px) and drawn as the sidebar's own pills. */
+.batch-start {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px var(--sb-inset-right) 8px var(--sb-inset);
+  padding: 0 8px;
+}
+.batch-start-btn,
+.batch-checkin-now-btn {
+  padding: 5px 10px;
+  font-size: var(--text-min);
+  line-height: 1.2;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.batch-start-btn:hover,
+.batch-checkin-now-btn:hover {
+  background: var(--bg-soft);
+}
+.batch-checkin {
+  margin: 4px var(--sb-inset-right) 0 var(--sb-inset);
+  padding: 0 8px;
+  font-size: var(--text-min);
+  color: var(--ink-2);
+}
+.batch-checkin-now-btn {
+  align-self: flex-start;
+  margin: 4px 0 6px calc(var(--sb-inset) + 8px);
+}
+.batch-waiting {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: var(--text-min);
+  color: var(--ink-3);
 }
 .batch-row {
   display: flex;
@@ -2749,6 +2811,71 @@ a.ch-row:hover {
   font-size: 13px;
   font-weight: 500;
 }
+.workers-pill {
+  align-self: flex-start;
+  margin-top: 6px;
+  background: var(--line-soft);
+  color: var(--ink-2);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+/* A chat's last finished goal, beside the title (spec/04 § Goals). Drawn as
+   the pill its neighbour `.waiting-pill` is, with the detail as a popover
+   under it. Unstyled, the icon stacked above the label and opening it poured
+   three lines of detail into the header, tripling its height. */
+.finished-goal {
+  position: relative;
+  align-self: center;
+  display: inline-flex;
+}
+.finished-goal-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: var(--text-min);
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.finished-goal-summary:hover {
+  color: var(--ink);
+}
+/* `fixed` with no offsets keeps the popover at its static spot — the pill's
+   top-left — while escaping `.chat-head-title-row`, whose overflow: hidden
+   (there for long-title ellipsis) clipped an absolute popover to nothing.
+   The margin drops it below the pill: 28px pill + 6px gap. */
+.finished-goal-detail {
+  position: fixed;
+  margin-top: 34px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  max-width: 360px;
+  padding: 10px 12px;
+  font-size: var(--text-min);
+  line-height: 1.45;
+  text-align: left;
+  color: var(--ink-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.finished-goal-detail > :first-child {
+  color: var(--ink);
+  font-weight: 500;
+}
 .chat-head-actions {
   /* Same 1fr basis as the crumb (so the title stays centred). This used to
      carry `min-width: fit-content` — never shrink below the icons — which
@@ -3429,7 +3556,9 @@ a.ch-row:hover {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--ink-3);
+  /* ink-2, not ink-3: the whole queued message is dimmed (.msg.queued), and
+     ink-3 under that dim left the label at 2.7:1. */
+  color: var(--ink-2);
   background: var(--bg-soft);
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -3550,7 +3679,7 @@ a.ch-row:hover {
   font: inherit;
   line-height: 1.65;
   color: var(--ink);
-  background: var(--bg);
+  background: var(--bg-elevated);
   border: 1px solid var(--accent-soft);
   border-radius: 10px;
   resize: vertical;
@@ -3577,7 +3706,7 @@ a.ch-row:hover {
   border: 1px solid var(--line);
 }
 .msg-edit-save {
-  color: var(--bg);
+  color: var(--on-accent);
   background: var(--accent);
   border: 1px solid var(--accent);
   display: inline-flex;
@@ -4154,8 +4283,15 @@ a.ch-row:hover {
 .tool-call,
 .tool-result,
 .tool-group {
-  font-family: 'JetBrains Mono Variable', ui-monospace, monospace;
-  font-size: 13px;
+  /* Plain-language rows ("Reading poll.ts"), so the body face; only the
+     expanded detail — real args and results — is code (`.tool-detail`). */
+  font-family:
+    'Figtree Variable',
+    'Inter Variable',
+    -apple-system,
+    system-ui,
+    sans-serif;
+  font-size: 14px;
   background: var(--bg-elevated);
   border-radius: var(--radius-sm);
   /* A run of tool calls should read as distinct rows, not a striped block
@@ -4186,21 +4322,6 @@ a.ch-row:hover {
 }
 .tool-summary:hover {
   background: var(--accent-soft, #cad9be);
-}
-/* The collapsed batch row (spec/14 § Main chat panel — "Tool runs collapse to
-   one row") is a description ("4 tool calls"), not code, so it stays in the
-   body font while the rest of `.tool-group` — and everything in its expanded
-   detail, which is real tool args/results — keeps the code font. */
-.tool-group .tool-summary-text {
-  font-family:
-    'Figtree Variable',
-    'Inter Variable',
-    -apple-system,
-    system-ui,
-    sans-serif;
-  /* A sentence in the body face, so it is set near body size — at the code
-     rows' 13px it read as a footnote. */
-  font-size: 15px;
 }
 /* A run whose AI summary failed says so rather than passing its count off as
    the summary; the reason is in the title. */
@@ -4284,7 +4405,16 @@ a.ch-row:hover {
   color: var(--ink-3);
   font-size: 13px;
 }
+/* Why a skill row can't open its SKILL.md. Inset with the summary above it
+   (10px) and set as secondary text — unstyled, it ran flush to the row edge. */
+.tool-call-skill-reason {
+  display: block;
+  padding: 0 10px 6px;
+  color: var(--ink-3);
+}
 .tool-detail {
+  font-family: 'JetBrains Mono Variable', ui-monospace, monospace;
+  font-size: 13px;
   padding: 4px 10px 10px 22px;
   border-top: 1px solid var(--bg-panel);
 }
@@ -4422,7 +4552,7 @@ a.ch-row:hover {
   display: block;
   width: 100%;
   border: none;
-  background: var(--bg-1);
+  background: var(--bg-soft);
   height: 320px;
 }
 .view-file-html .view-file-frame,
@@ -4438,7 +4568,7 @@ a.ch-row:hover {
   width: 100%;
   padding: 0;
   border: none;
-  background: var(--bg-1);
+  background: var(--bg-soft);
   cursor: zoom-in;
   line-height: 0;
 }
@@ -5394,7 +5524,7 @@ a.ch-row:hover {
   border: none;
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -5663,8 +5793,11 @@ a.ch-row:hover {
   position: relative;
   display: inline-flex;
   align-items: center;
-  flex: 0 1 auto;
-  max-width: 160px;
+  /* Sized to its value (`field-sizing` below) and never squeezed below it, so
+     a short mode ("Auto", "Plan") stays whole on a phone; a long one is capped
+     at a fifth of the toolbar there, leaving the model pill its share. */
+  flex: 0 0 auto;
+  max-width: min(160px, 20%);
   min-width: 0;
 }
 /* Same box the model pill next to it draws — flat at rest, `appearance: none`
@@ -5688,6 +5821,10 @@ a.ch-row:hover {
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-overflow: ellipsis;
+  /* Size to the CHOSEN mode, as the model pill sizes to its model. A select
+     otherwise takes its longest option's width ("Bypass permissions"), which
+     left the caret ~100px adrift from a short value like "Auto". */
+  field-sizing: content;
 }
 .permission-mode:hover:not(:disabled) {
   color: var(--ink-2);
@@ -6105,9 +6242,29 @@ a.ch-row:hover {
 }
 /* The Monaco wrapper (`<section>`) must fill the vertical space left between the
    meta strip and the action footer, not sit at its intrinsic height. */
-.browse-editor > section {
+.browse-editor > section,
+.browse-body > section {
   flex: 1;
   min-height: 0;
+}
+/* The Files page's editor column before a file is picked. Centred and
+   muted like the other empty panes; unstyled, the sentence sat jammed into
+   the column's top-left corner against the tree divider. */
+.files-page-placeholder {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-3);
+}
+/* Between the meta strip and the footer: the editor and the overlays that
+   cover it while its content loads or fails. */
+.browse-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 /* Redesign: the "Git diff" / "Agent's edits" inline view replaces the plain
    editor's `<section>` with an extra wrapper div (so it can carry its own
@@ -6414,6 +6571,7 @@ a.ch-row:hover {
    rail; `.browse-preview-pdf` fills the space outright the way a viewer is
    expected to. */
 .browse-binary-preview {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -7327,7 +7485,7 @@ a.ch-row:hover {
 .stp-permission-actions .stp-approve {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .stp-tfoot {
   flex: 0 0 auto;
@@ -7383,7 +7541,8 @@ a.ch-row:hover {
 .stp-send {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
-  color: #fff;
+  /* --on-accent, not #fff: dark mode's lighter accent left white at 2.7:1. */
+  color: var(--on-accent);
 }
 /* ONE scroll region for the whole inventory (Tom, `patch/todo.md` — "tools
    dialog scrolls in three places and only shows a few tools"). Each category
@@ -7586,6 +7745,17 @@ a.ch-row:hover {
 }
 /* Sits beside the primary action rather than under the title, so the head
    stays one row. Same field language as the sidebar's archived search. */
+/* The jobs head carries search, three filters and + New job beside the
+   title — wider than a phone, where it ran off the right edge and left the
+   filters and New job unreachable. Let it wrap onto further rows instead. */
+.jobs-route .route-head {
+  flex-wrap: wrap;
+  row-gap: 10px;
+  /* Packed from the start, not spread: wrapped rows read as a run of fields
+     rather than scattering to both edges. On a wide window the search's
+     `margin-left: auto` still pushes the whole cluster to the right. */
+  justify-content: flex-start;
+}
 .jobs-search {
   margin-left: auto;
   margin-right: 8px;
@@ -7723,8 +7893,10 @@ a.ch-row:hover {
 .job-row.disabled .job-trigger,
 .job-row.disabled .job-action,
 .job-row.disabled .job-last-fired {
-  color: var(--faded, var(--ink-3));
-  opacity: 0.55;
+  /* Muted, not faded as well: ink-3 at 55% opacity left a disabled job's
+     name at 2.3–2.4:1 — too faint to find the job you want to turn back on.
+     ink-3 alone still reads plainly as "off" beside the full-ink rows. */
+  color: var(--ink-3);
 }
 .job-row-main {
   display: flex;
@@ -8057,7 +8229,7 @@ a.ch-row:hover {
 .job-editor .chip-row button[aria-pressed='true'] {
   background: var(--leaf, #4f7a3e);
   border-color: var(--leaf, #4f7a3e);
-  color: #fff;
+  color: var(--on-accent);
 }
 /* Live-preview readout for the recurrence builder — same visual role as
    .cron-computed, reused for both the structured and raw-RRULE paths. */
@@ -8509,6 +8681,14 @@ button.set-row-open:focus-visible {
 }
 .set-add-bar.start {
   justify-content: flex-start;
+}
+/* An add bar with more than one line (a sign-in that reports progress under
+   its buttons). Not a .set-row: it sits below the card, so a row's divider
+   and inset would draw a card edge that isn't there. */
+.set-add-bar.stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
 }
 .set-add .set-form {
   margin-top: 8px;
@@ -9001,6 +9181,12 @@ button.set-row-open:focus-visible {
   .set-row {
     flex-wrap: wrap;
   }
+  /* The label claims ~10em before the control drops below it. At a basis of
+     0 the row never wrapped: a wide control ("15 · min with no new output")
+     kept its place and squeezed "Stalled after" to one letter per line. */
+  .set-row-text {
+    flex: 1 1 10em;
+  }
   .set-row-ctrl {
     justify-content: flex-start;
   }
@@ -9061,6 +9247,12 @@ button.set-row-open:focus-visible {
 .empty-hint {
   padding: 8px 2px;
   color: var(--ink-3);
+}
+/* Its failure twin ("failed to load runs: …") — same place, danger ink.
+   Unstyled, a load error read as ordinary content. */
+.error {
+  padding: 8px 2px;
+  color: var(--danger);
 }
 .empty-state {
   color: var(--ink-3);
@@ -9204,6 +9396,11 @@ main.empty-state p {
   padding: 28px;
   color: var(--voice);
 }
+/* The Retry beside a route's load error — set apart from the message rather
+   than running straight on from it ("HTTP 500Retry"). */
+.route-error .secondary-btn {
+  margin-left: 12px;
+}
 
 /* ---------- Brand mark composition ---------- */
 
@@ -9304,8 +9501,8 @@ main.empty-state p {
   position: fixed;
   bottom: 12px;
   right: 12px;
-  background: var(--err);
-  color: #fff;
+  background: var(--danger);
+  color: var(--on-accent);
   border: none;
   border-radius: var(--radius-pill);
   padding: 4px 10px;
@@ -9356,7 +9553,7 @@ main.empty-state p {
 .dev-error-clear:hover,
 .dev-error-close:hover {
   color: var(--ink-2);
-  background: var(--bg-hover);
+  background: var(--bg-soft);
 }
 .dev-error-empty {
   padding: 12px;
@@ -9382,7 +9579,7 @@ main.empty-state p {
   font-family: 'JetBrains Mono Variable', ui-monospace, monospace;
 }
 .dev-error-type {
-  color: var(--err);
+  color: var(--danger);
   white-space: nowrap;
 }
 .dev-error-time {
@@ -10526,7 +10723,9 @@ button.background-task-bar-row:hover .background-task-bar-description {
   cursor: pointer;
 }
 .model-option:hover {
-  background: var(--bg-hover, var(--bg-subtle));
+  /* Was var(--bg-hover, var(--bg-subtle)) — neither token exists, so the
+     hovered row got no highlight at all. */
+  background: var(--bg-soft);
 }
 .model-option.selected .model-option-name {
   font-weight: 600;
@@ -11247,6 +11446,9 @@ button.background-task-bar-row:hover .background-task-bar-description {
 .job-queue .status-running {
   color: var(--ink);
 }
+.job-queue .status-queued {
+  color: var(--ink-3);
+}
 
 /* ==========================================================================
    DESKTOP-REVIEW 2026-07-14 — appended overrides (A/B items).
@@ -11484,7 +11686,7 @@ button.background-task-bar-row:hover .background-task-bar-description {
   place-items: center;
   width: 30px;
   height: 30px;
-  border: 1px solid var(--rule);
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg-elevated);
   color: var(--ink-3);
@@ -11555,7 +11757,7 @@ button.background-task-bar-row:hover .background-task-bar-description {
   color: var(--ink-2);
 }
 .terminal-tab.active {
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--accent-strong);
   box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
 }
@@ -12019,7 +12221,7 @@ input.browse-filter {
   flex: 0 0 auto;
   overflow-y: auto;
   border-top: 1px solid var(--line-soft);
-  background: var(--bg-2, var(--bg));
+  background: var(--bg-elevated);
   padding: 6px 0;
 }
 .threads-empty {
@@ -12035,6 +12237,13 @@ input.browse-filter {
 .thread-row:last-child {
   border-bottom: none;
 }
+/* The row is top-aligned (a summary can wrap under the title), so the dot is
+   dropped to the middle of the title's first line — (21.7px line - 9px dot)/2
+   — rather than riding 6px above it. */
+.thread-row > .badge {
+  flex: 0 0 auto;
+  margin-top: 6px;
+}
 .thread-body {
   flex: 1 1 auto;
   min-width: 0;
@@ -12045,6 +12254,11 @@ input.browse-filter {
   gap: 8px;
   font-weight: 600;
   font-size: 14px;
+  /* One line: the name keeps its width and the host · folder after it
+     truncates. Wrappable, a narrow strip broke the name at its hyphen
+     ("index-" / "rebuild") while the path kept its room. */
+  white-space: nowrap;
+  min-width: 0;
 }
 .thread-where {
   font-family: 'JetBrains Mono Variable', ui-monospace, monospace;
@@ -12089,7 +12303,7 @@ input.browse-filter {
   padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--ink);
   font-size: 13px;
   cursor: pointer;
@@ -12132,7 +12346,7 @@ input.browse-filter {
   padding: 0 10px;
   border-radius: 13px;
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--ink-2);
   font-size: var(--text-min);
   font-weight: 600;
@@ -12179,7 +12393,7 @@ input.browse-filter {
   padding: 0 8px;
   border-radius: 11px;
   border: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--ink-2);
   font-size: var(--text-min);
   cursor: pointer;
@@ -12723,7 +12937,7 @@ button.chat-usage-crumb:hover {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-1);
+  gap: 4px;
 }
 .tool-blob-load {
   padding: 2px 8px;
@@ -12731,11 +12945,11 @@ button.chat-usage-crumb:hover {
   border-radius: var(--radius-sm);
   background: none;
   color: var(--text-muted);
-  font-size: var(--font-xs);
+  font-size: var(--text-min);
   cursor: pointer;
 }
 .tool-blob-load:hover:not(:disabled) {
-  color: var(--text);
+  color: var(--ink);
   border-color: var(--text-muted);
 }
 .tool-blob-load:disabled {
@@ -12744,7 +12958,7 @@ button.chat-usage-crumb:hover {
 }
 .tool-blob-error {
   color: var(--danger);
-  font-size: var(--font-xs);
+  font-size: var(--text-min);
 }
 
 /* The account a chat runs on: the same pill as the model beside it, and the
@@ -13041,7 +13255,7 @@ select.new-chat-account:focus-visible {
   border-radius: var(--radius-sm);
   padding: 6px 10px;
   font: inherit;
-  background: var(--white, #fff);
+  background: var(--bg-elevated);
   color: var(--ink);
 }
 .mm-tx .ln {
@@ -13102,13 +13316,21 @@ select.new-chat-account:focus-visible {
   font-weight: 600;
   cursor: pointer;
 }
+/* Same box as `.mm-do` beside it — it had the browser's 1px padding, so its
+   hit area was 10px shorter than the button it sits next to, and no hover. */
 .mm-dis {
   flex: none;
   border: none;
   background: none;
   color: var(--ink-3);
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
   font: inherit;
   cursor: pointer;
+}
+.mm-dis:hover {
+  color: var(--ink-2);
+  background: var(--bg-soft);
 }
 .mm-card.done {
   background: var(--bg-soft);
@@ -13169,7 +13391,8 @@ select.new-chat-account:focus-visible {
   white-space: nowrap;
   border: none;
   background: var(--voice);
-  color: #fff;
+  /* --on-accent, not #fff: dark mode's lighter --voice left white at 2.9:1. */
+  color: var(--on-accent);
   border-radius: var(--radius-pill);
   padding: 4px 14px;
   font: inherit;
@@ -13187,7 +13410,7 @@ select.new-chat-account:focus-visible {
 .meeting-btn.mm-live {
   background: var(--voice);
   border-color: var(--voice);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* ---- Pads (spec/14 § Pads) ---- */
@@ -13483,8 +13706,8 @@ select.new-chat-account:focus-visible {
   gap: 6px;
   padding: 6px 8px;
   border-radius: 8px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #ccc);
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
 }
 .chat-find-input { width: 200px; background: transparent; border: 0; outline: 0; color: inherit; }

@@ -645,7 +645,7 @@ describe('tool call / tool result', () => {
     // the NAMES of the call's arguments — and not the absolute path, which on
     // this one-line row truncated away the filename and left every row in a
     // folder reading identically.
-    expect(hasText(r.root, 'Edit poll.ts')).toBe(true);
+    expect(hasText(r.root, 'Editing poll.ts')).toBe(true);
     expect(hasText(r.root, '/home/claude-dev')).toBe(false);
     const row = findHost(r.root, (i) =>
       String(i.props['accessibilityLabel'] ?? '').startsWith('Tool call'),

@@ -206,6 +206,7 @@ function makeFetch(chats: ChatRow[]): ReturnType<typeof vi.fn> {
         })),
       });
     }
+    if (u === '/api/notifications') return json({ items: [], unread: 0 });
     return json({});
   });
 }

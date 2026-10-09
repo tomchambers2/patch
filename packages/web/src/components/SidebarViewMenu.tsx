@@ -137,9 +137,7 @@ function SortGroup(props: {
 }): JSX.Element {
   return (
     <div role="group" aria-label={props.title} data-testid={`sidebar-${props.id}`}>
-      <div className="sidebar-view-option-label" style={{ opacity: 0.6, padding: '6px 10px 2px' }}>
-        {props.title}
-      </div>
+      <div className="sidebar-view-group-label">{props.title}</div>
       {CHAT_SORTS.map((opt) => (
         <button
           key={opt.value}

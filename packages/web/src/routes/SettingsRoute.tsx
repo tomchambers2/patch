@@ -129,7 +129,7 @@ export function SettingsRoute(): JSX.Element {
     return (
       <div className="route-error" data-testid="settings-error">
         Failed to load settings: {(error as Error).message}
-        <button type="button" onClick={() => refetch()}>
+        <button type="button" className="secondary-btn" onClick={() => refetch()}>
           Retry
         </button>
       </div>

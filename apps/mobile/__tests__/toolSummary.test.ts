@@ -20,29 +20,58 @@ const result = (seq: number, tool: string, callId?: string): ChatEventEntry =>
 const message = (seq: number): ChatEventEntry =>
   ({ seq, kind: 'message', role: 'assistant', content: 'hi', at: seq }) as ChatEventEntry;
 
+// Todoist 9 Oct 2026: tool rows show "Bash" + the description in code font; the
+// user wants a plain list of "Doing x". No tool id may lead the row.
+describe('toolCallSummary — plain language, no tool id', () => {
+  it('never starts a row with the tool id', () => {
+    const calls: [string, Record<string, unknown>][] = [
+      ['Bash', { command: 'ls', description: 'List the files' }],
+      ['Bash', { command: 'ls' }],
+      ['Read', { file_path: 'a.ts' }],
+      ['Grep', { pattern: 'x' }],
+      ['Glob', { pattern: '*.ts' }],
+      ['WebFetch', { url: 'https://e.com' }],
+      ['WebSearch', { query: 'q' }],
+      ['Task', { subagent_type: 'Explore' }],
+      ['Skill', { skill: 'plant' }],
+      ['TodoWrite', {}],
+      ['mcp__playwright__browser_click', {}],
+    ];
+    for (const [tool, args] of calls) {
+      const text = toolCallSummary(tool, args);
+      expect(text.startsWith(`${tool} `), text).toBe(false);
+      expect(text).toMatch(/^[A-Z]/);
+    }
+    expect(toolCallSummary('Bash', { description: 'list the files' })).toBe('List the files');
+    expect(toolCallSummary('mcp__playwright__browser_click', {})).toBe(
+      'Using playwright browser click',
+    );
+  });
+});
+
 describe('toolCallSummary', () => {
   it("prefers the call's own description over the raw argument", () => {
     expect(toolCallSummary('Bash', { command: 'pnpm test', description: 'Run the suite' })).toBe(
-      'Bash Run the suite',
+      'Run the suite',
     );
   });
 
   it('falls back to what the call acted on', () => {
-    expect(toolCallSummary('Read', { file_path: 'src/poll.ts' })).toBe('Read poll.ts');
-    expect(toolCallSummary('Grep', { pattern: 'timeout' })).toBe('Grep "timeout"');
-    expect(toolCallSummary('Bash', { command: 'pnpm test' })).toBe('Bash "pnpm test"');
-    expect(toolCallSummary('Task', { subagent_type: 'Explore' })).toBe('Task Explore');
+    expect(toolCallSummary('Read', { file_path: 'src/poll.ts' })).toBe('Reading poll.ts');
+    expect(toolCallSummary('Grep', { pattern: 'timeout' })).toBe('Searching for "timeout"');
+    expect(toolCallSummary('Bash', { command: 'pnpm test' })).toBe('Running "pnpm test"');
+    expect(toolCallSummary('Task', { subagent_type: 'Explore' })).toBe('Running the Explore agent');
   });
 
-  it('reads as the bare tool name when there is nothing to name', () => {
-    expect(toolCallSummary('TodoWrite', { todos: [] })).toBe('TodoWrite');
-    expect(toolCallSummary('Bash', undefined)).toBe('Bash');
-    expect(toolCallSummary(undefined, {})).toBe('tool');
+  it('still says what it is doing when there is nothing to name', () => {
+    expect(toolCallSummary('TodoWrite', { todos: [] })).toBe('Updating the todo list');
+    expect(toolCallSummary('Bash', undefined)).toBe('Running a command');
+    expect(toolCallSummary(undefined, {})).toBe('Using a tool');
   });
 
   it('ignores a blank or non-string description, and keeps the row to one line', () => {
     expect(toolCallSummary('Bash', { command: 'pnpm test', description: '  ' })).toBe(
-      'Bash "pnpm test"',
+      'Running "pnpm test"',
     );
     expect(toolCallSummary('Bash', { description: 'a'.repeat(90) })).toMatch(/…$/);
   });
@@ -58,13 +87,19 @@ describe('toolCallSummary', () => {
 // still one tap away in the expanded args. Mirrors the web test of the same name.
 describe('toolCallSummary — path targets read as the filename (spec/15 § Chat detail)', () => {
   const LONG = '/home/claude-dev/projects/portfolio/docs/google-cloud.md';
+  const VERB: Record<string, string> = {
+    Read: 'Reading',
+    Write: 'Writing',
+    Edit: 'Editing',
+    MultiEdit: 'Editing',
+  };
 
   it('shows the filename, not the long absolute path, for every path-valued tool', () => {
     for (const tool of ['Read', 'Write', 'Edit', 'MultiEdit']) {
-      expect(toolCallSummary(tool, { file_path: LONG })).toBe(`${tool} google-cloud.md`);
+      expect(toolCallSummary(tool, { file_path: LONG })).toBe(`${VERB[tool]} google-cloud.md`);
     }
     expect(toolCallSummary('NotebookEdit', { notebook_path: LONG })).toBe(
-      'NotebookEdit google-cloud.md',
+      'Editing google-cloud.md',
     );
   });
 
@@ -91,39 +126,43 @@ describe('toolCallSummary — path targets read as the filename (spec/15 § Chat
       toolCallSummary('Edit', { file_path: '/home/claude-dev/projects/portfolio/CONTEXT.md' }),
       toolCallSummary('Write', { file_path: '/home/claude-dev/projects/portfolio/deploy.md' }),
     ];
-    expect(labels.join(', ')).toBe('Read google-cloud.md, Edit CONTEXT.md, Write deploy.md');
+    expect(labels.join(', ')).toBe(
+      'Reading google-cloud.md, Editing CONTEXT.md, Writing deploy.md',
+    );
   });
 
   it('leaves a bare filename alone — there is no directory to drop', () => {
-    expect(toolCallSummary('Read', { file_path: 'poll.ts' })).toBe('Read poll.ts');
+    expect(toolCallSummary('Read', { file_path: 'poll.ts' })).toBe('Reading poll.ts');
     expect(toolCallSummary('NotebookEdit', { notebook_path: 'run.ipynb' })).toBe(
-      'NotebookEdit run.ipynb',
+      'Editing run.ipynb',
     );
   });
 
   it('handles a path with no filename rather than going blank', () => {
-    expect(toolCallSummary('Read', { file_path: '/' })).toBe('Read /');
+    expect(toolCallSummary('Read', { file_path: '/' })).toBe('Reading /');
     expect(toolCallSummary('Read', { file_path: '/home/claude-dev/projects/' })).toBe(
-      'Read projects',
+      'Reading projects',
     );
   });
 
   it("NotebookEdit still falls back to file_path when there's no notebook_path", () => {
     expect(toolCallSummary('NotebookEdit', { file_path: '/home/tom/nb/run.ipynb' })).toBe(
-      'NotebookEdit run.ipynb',
+      'Editing run.ipynb',
     );
     expect(
       toolCallSummary('NotebookEdit', {
         notebook_path: '   ',
         file_path: '/home/tom/nb/run.ipynb',
       }),
-    ).toBe('NotebookEdit run.ipynb');
+    ).toBe('Editing run.ipynb');
   });
 
   it('leaves non-path targets untouched — a Glob pattern is not a path', () => {
-    expect(toolCallSummary('Glob', { pattern: 'src/**/*.ts' })).toBe('Glob src/**/*.ts');
+    expect(toolCallSummary('Glob', { pattern: 'src/**/*.ts' })).toBe(
+      'Finding files matching src/**/*.ts',
+    );
     expect(toolCallSummary('WebFetch', { url: 'https://example.com/a/b.html' })).toBe(
-      'WebFetch https://example.com/a/b.html',
+      'Fetching https://example.com/a/b.html',
     );
   });
 });

@@ -215,6 +215,18 @@ describe('running delegates strip', () => {
     expect(findAllHost(r.root, byTestId('delegate-strip'))).toHaveLength(0);
   });
 
+  it('shows a workers pill in the header while subagents run', () => {
+    const r = renderRN(<ChatDetailScreen />);
+    expect(findAllHost(r.root, byTestId('header-workers'))).toHaveLength(0);
+    update('sub-1', 'draft the email', 'running', 1);
+    update('sub-2', 'build the design', 'running', 2);
+    expect(hasText(findHost(r.root, byTestId('header-workers')), '2 workers')).toBe(true);
+    update('sub-1', 'draft the email', 'done', 3);
+    expect(hasText(findHost(r.root, byTestId('header-workers')), '1 worker')).toBe(true);
+    update('sub-2', 'build the design', 'done', 4);
+    expect(findAllHost(r.root, byTestId('header-workers'))).toHaveLength(0);
+  });
+
   it('opens the read-only transcript from the strip', async () => {
     const r = renderRN(<ChatDetailScreen />);
     update('sub-1', 'draft the email', 'running', 1);

@@ -1338,6 +1338,13 @@ export interface SendInputOptions {
    */
   fromUser?: boolean;
   /**
+   * Another agent wrote this via `patch_send_to`. Like a person's message it
+   * brings the chat back to the main list — out of Hidden, out of a snooze, out
+   * of Archived — because a chat that has been written to should be seen
+   * (spec/04 § Hidden). Unlike `fromUser` it makes no claim that a person sent it.
+   */
+  fromAgent?: boolean;
+  /**
    * This turn is a job's own fire into the chat (spec/08 § Action — a
    * `continue`/`message` action's fire into an EXISTING chat), not something
    * the user typed. Set only by the server's job dispatcher via
@@ -4778,7 +4785,12 @@ export class Daemon {
     // brings it into the list. `setArchived`/`setHidden` emit the state
     // themselves, so this doesn't need its own emit.
     if (state.status === 'archived') await this.setArchived(req.chatId, false);
-    if (req.fromUser === true && state.hidden) await this.setHidden(req.chatId, false);
+    if ((req.fromUser === true || req.fromAgent === true) && state.hidden) {
+      await this.setHidden(req.chatId, false);
+    }
+    if (req.fromAgent === true && state.snoozedUntil !== null) {
+      await this.setSnoozed(req.chatId, null);
+    }
 
     // spec/04 § Branching — `chat.input` can address a specific branch. Only
     // a branch OTHER than the active one is routed to the independent

@@ -29,6 +29,7 @@ vi.mock('../api/rest.js', async (importOriginal) => {
   return {
     ApiError: actual.ApiError,
     api: {
+      getNotifications: vi.fn(async () => ({ items: [], unread: 0 })),
       markBatchOpened: vi.fn(async () => ({ batch: null, carryover: [] })),
       getFileContent: vi.fn(async (_chatId: string, _path: string) => ({
         path: _path,
@@ -615,7 +616,7 @@ describe('ChatRoute regression', () => {
     // own description where it has one), not a bare "Bash".
     expect(tc.getAttribute('data-open')).toBe('false');
     expect(screen.queryByTestId('tool-call-detail')).not.toBeInTheDocument();
-    expect(tc.textContent).toContain('Bash List the release files');
+    expect(tc.textContent).toContain('List the release files');
     // Everything the summary didn't name still waits for the expansion.
     expect(tc.textContent).not.toContain('/secret/path');
     expect(tc.textContent).not.toContain('120000');
@@ -631,15 +632,15 @@ describe('ChatRoute regression', () => {
       { seq: 1, kind: 'tool_call', tool: 'Read', toolArgs: { file_path: 'src/poll.ts' }, at: 0 },
     ]);
     renderChat('c-tool-target');
-    expect(screen.getByTestId('tool-call').textContent).toContain('Read poll.ts');
+    expect(screen.getByTestId('tool-call').textContent).toContain('Reading poll.ts');
   });
 
-  it('an ungrouped tool call with nothing nameable stays the bare tool name (spec/14)', () => {
+  it('an ungrouped tool call with nothing nameable still reads as plain language (spec/14)', () => {
     seedChat('c-tool-bare', [
       { seq: 1, kind: 'tool_call', tool: 'TodoWrite', toolArgs: { todos: [] }, at: 0 },
     ]);
     renderChat('c-tool-bare');
-    expect(screen.getByTestId('tool-call').textContent?.trim()).toBe('▸TodoWrite');
+    expect(screen.getByTestId('tool-call').textContent?.trim()).toBe('▸Updating the todo list');
   });
 
   // The expanded detail formats args as key/value fields (ToolFields), not a
@@ -2312,7 +2313,7 @@ describe('ChatRoute regression', () => {
       { seq: 1, kind: 'tool_call', tool: 'Read', callId: 'a', toolArgs: { file_path: 'x' }, at: 0 },
     ]);
     renderChat('c-tool-pending');
-    expect(screen.getByTestId('tool-call').textContent).toContain('Read x');
+    expect(screen.getByTestId('tool-call').textContent).toContain('Reading x');
     expect(screen.queryByTestId('tool-call-result')).not.toBeInTheDocument();
   });
 

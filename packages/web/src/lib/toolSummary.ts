@@ -55,62 +55,90 @@ function fileName(path: string): string {
   return folderName(path);
 }
 
-/**
- * The part of the summary after the tool name: what this call acted on.
- * Free text (a command, a search) is quoted so it reads as a value rather than
- * running into the tool name; identifiers (paths, URLs, agent names) are not.
- */
-function toolCallTarget(tool: string, args: Record<string, unknown>): string | undefined {
-  switch (tool) {
-    case 'Read':
-    case 'Write':
-    case 'Edit':
-    case 'MultiEdit': {
-      const path = str(args, 'file_path');
-      return path ? fileName(path) : undefined;
-    }
-    case 'NotebookEdit': {
-      const path = str(args, 'notebook_path') ?? str(args, 'file_path');
-      return path ? fileName(path) : undefined;
-    }
-    case 'Glob':
-      return str(args, 'pattern');
-    case 'Grep': {
-      const pattern = str(args, 'pattern');
-      return pattern ? `"${pattern}"` : undefined;
-    }
-    case 'Bash': {
-      const command = str(args, 'command');
-      return command ? `"${clip(command, MAX_COMMAND)}"` : undefined;
-    }
-    case 'WebFetch':
-      return str(args, 'url');
-    case 'WebSearch': {
-      const query = str(args, 'query');
-      return query ? `"${query}"` : undefined;
-    }
-    case 'Task':
-      return str(args, 'subagent_type');
-    case 'Skill':
-      return str(args, 'skill');
-    default:
-      return undefined;
-  }
+/** `Foo bar` from `foo_bar` — an MCP tool id read as words. */
+function words(id: string): string {
+  return id.replace(/_+/g, ' ').trim();
 }
 
 /**
- * One line naming the call: `<tool> <what it's doing>`, or the bare tool name
- * when the tool offers nothing to name. Tools that carry their own
- * `description` (Bash, Task) win over the raw argument — the model already
- * wrote the readable version of what it is up to.
+ * The call as a plain-language "Doing x" phrase. Free text (a command, a
+ * search) is quoted so it reads as a value; identifiers (paths, URLs, agent
+ * names) are not. A tool with nothing to name still says what kind of thing it
+ * is doing ("Reading a file"), never its bare id.
+ */
+function toolCallPhrase(tool: string, args: Record<string, unknown>): string {
+  switch (tool) {
+    case 'Read': {
+      const path = str(args, 'file_path');
+      return path ? `Reading ${fileName(path)}` : 'Reading a file';
+    }
+    case 'Write': {
+      const path = str(args, 'file_path');
+      return path ? `Writing ${fileName(path)}` : 'Writing a file';
+    }
+    case 'Edit':
+    case 'MultiEdit': {
+      const path = str(args, 'file_path');
+      return path ? `Editing ${fileName(path)}` : 'Editing a file';
+    }
+    case 'NotebookEdit': {
+      const path = str(args, 'notebook_path') ?? str(args, 'file_path');
+      return path ? `Editing ${fileName(path)}` : 'Editing a notebook';
+    }
+    case 'Glob': {
+      const pattern = str(args, 'pattern');
+      return pattern ? `Finding files matching ${pattern}` : 'Finding files';
+    }
+    case 'Grep': {
+      const pattern = str(args, 'pattern');
+      return pattern ? `Searching for "${pattern}"` : 'Searching files';
+    }
+    case 'Bash': {
+      const command = str(args, 'command');
+      return command ? `Running "${clip(command, MAX_COMMAND)}"` : 'Running a command';
+    }
+    case 'WebFetch': {
+      const url = str(args, 'url');
+      return url ? `Fetching ${url}` : 'Fetching a page';
+    }
+    case 'WebSearch': {
+      const query = str(args, 'query');
+      return query ? `Searching the web for "${query}"` : 'Searching the web';
+    }
+    case 'Task':
+    case 'Agent': {
+      const agent = str(args, 'subagent_type');
+      return agent ? `Running the ${agent} agent` : 'Running an agent';
+    }
+    case 'Skill': {
+      const skill = str(args, 'skill');
+      return skill ? `Using the ${skill} skill` : 'Using a skill';
+    }
+    case 'TodoWrite':
+      return 'Updating the todo list';
+    case 'ToolSearch':
+      return 'Loading tools';
+  }
+  const mcp = /^mcp__(.+?)__(.+)$/.exec(tool);
+  if (mcp) return `Using ${words(mcp[1] === 'patch' ? mcp[2]! : `${mcp[1]} ${mcp[2]}`)}`;
+  return `Using ${words(tool)}`;
+}
+
+/**
+ * One plain-language line saying what the call is doing — "Reading poll.ts",
+ * "Listing open PRs" — with no tool id in it. Tools that carry their own
+ * `description` (Bash, Task) win over the phrase derived from the arguments —
+ * the model already wrote the readable version of what it is up to.
  */
 export function toolCallSummary(tool: string | undefined, rawArgs: unknown): string {
-  const name = tool ?? 'tool';
   const args =
     typeof rawArgs === 'object' && rawArgs !== null ? (rawArgs as Record<string, unknown>) : {};
   const described = str(args, 'description');
-  const detail = described ? clip(described, MAX_DESCRIPTION) : toolCallTarget(name, args);
-  return detail ? `${name} ${detail}` : name;
+  if (described) {
+    const line = clip(described, MAX_DESCRIPTION);
+    return line.charAt(0).toUpperCase() + line.slice(1);
+  }
+  return tool ? toolCallPhrase(tool, args) : 'Using a tool';
 }
 
 /**

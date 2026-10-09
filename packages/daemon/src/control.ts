@@ -1506,6 +1506,8 @@ export async function buildControl(opts: BuildOptions = {}): Promise<FastifyInst
         // waiting on a doorbell for it; a chat that needs the user's attention
         // asks for it with patch_notify.
         origin: 'machine',
+        // An agent writing into the chat brings it back to the main list.
+        fromAgent: true,
       });
       if (opts.emitWire && callerChatId) {
         opts.emitWire({

@@ -79,6 +79,40 @@ test.describe('notifications bell', () => {
     await expect(page.getByTestId('notif-mark-all')).toBeDisabled();
   });
 
+  test('a chat with an unread notification shows a bell on its row, and opening it reads it', async ({
+    page,
+  }) => {
+    const items = [
+      {
+        id: 'n1',
+        chatId: 'chat_md',
+        message: 'Washing done',
+        importance: 'normal',
+        sentAt: Date.now(),
+        readAt: null as number | null,
+      },
+    ];
+    const snap = () => ({ items, unread: items.filter((i) => i.readAt === null).length });
+    await page.route('**/api/notifications', (r) =>
+      r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(snap()) }),
+    );
+    await page.route('**/api/notifications/read', async (r) => {
+      for (const i of items) i.readAt = Date.now();
+      await r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(snap()),
+      });
+    });
+    await page.goto(HARNESS);
+    await expect(page.getByTestId('name-bell-chat_md')).toBeVisible();
+    await expect(page.getByTestId('name-bell-chat_bus')).toHaveCount(0);
+
+    await page.getByTestId('chat-row-chat_md').click();
+    await expect(page.getByTestId('notif-badge')).toHaveCount(0);
+    await expect(page.getByTestId('name-bell-chat_md')).toHaveCount(0);
+  });
+
   test('empty log says so and shows no badge', async ({ page }) => {
     await page.route('**/api/notifications', (r) =>
       r.fulfill({

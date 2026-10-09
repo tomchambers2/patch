@@ -215,6 +215,7 @@ function makeFetch(chats: ChatRow[] = []): ReturnType<typeof vi.fn> {
     if (u === '/api/chats/counts') {
       return json({ hidden: 0, archived: 0, snoozed: 0, deleted: 0, automations: 0 });
     }
+    if (u === '/api/notifications') return json({ items: [], unread: 0 });
     if (u.includes('/archive')) return json({ ok: true });
     // One chat by id (spec/01 § HTTP API) — the chat panel asks for this when
     // the route names a chat the roster didn't carry. These fixtures serve only
@@ -1133,6 +1134,12 @@ describe('AppShell', () => {
           JSON.stringify({ hidden: 0, archived: 0, snoozed: 0, deleted: 0, automations: 0 }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
+      }
+      if (u === '/api/notifications') {
+        return new Response(JSON.stringify({ items: [], unread: 0 }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       }
       if (u.includes('/archive')) {
         return new Response(JSON.stringify({ error: 'nope' }), { status: 500 });

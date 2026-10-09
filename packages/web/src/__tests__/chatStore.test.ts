@@ -1298,6 +1298,24 @@ describe('chatStore reducer', () => {
     expect(useChatStore.getState().chats['c1']?.lastSeq).toBe(2);
   });
 
+  it('the same tool call arriving again at a different seq renders once', () => {
+    const s = useChatStore.getState();
+    s.applyEvent({ type: 'chat.spawned', daemonId: 'd1', chatId: 'c1', folder: '~/p' });
+    const call = (seq: number) =>
+      ({
+        type: 'chat.tool_call',
+        chatId: 'c1',
+        seq,
+        tool: 'Bash',
+        args: { command: 'ls' },
+        callId: 'call-1',
+      }) as const;
+    s.applyEvent(call(1));
+    s.applyEvent(call(2));
+    const tl = useChatStore.getState().timelines['c1'] ?? [];
+    expect(tl.filter((e) => e.kind === 'tool_call')).toHaveLength(1);
+  });
+
   it('a re-delivered chat.replay does not duplicate tool_call/tool_result entries onto the tail (out of message order)', () => {
     // ws.ts § requestReplay: "opening a chat requests its transcript, and the
     // socket completing its connect a moment later requests every held chat —

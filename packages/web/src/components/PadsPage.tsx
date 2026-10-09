@@ -78,7 +78,11 @@ export function PadsPage(): JSX.Element {
     return (
       <div className="route-error" data-testid="pads-error">
         Failed to load pads: {error}
-        <button type="button" onClick={() => void usePadsStore.getState().refresh()}>
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={() => void usePadsStore.getState().refresh()}
+        >
           Retry
         </button>
       </div>
